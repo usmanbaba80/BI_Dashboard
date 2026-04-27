@@ -1,0 +1,20 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /opt/dagster/app/
+WORKDIR /opt/dagster/app
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY definitions.py /opt/dagster/app/
+
+EXPOSE 4000
+
+HEALTHCHECK --interval=10s --timeout=8s --start-period=60s --retries=12 \
+    CMD dagster api grpc-health-check -h 127.0.0.1 -p 4000 || exit 1
+
+CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "definitions.py"]

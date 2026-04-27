@@ -1,0 +1,1666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMB Analytics Stack — Complete Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,900;1,9..144,300;1,9..144,600&family=JetBrains+Mono:wght@300;400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #161921;
+  --surface2: #1e2230;
+  --border: #262d3d;
+  --text: #e2e8f8;
+  --muted: #6b7899;
+  --dim: #3a4460;
+
+  /* Tool colours */
+  --airbyte:  #7b61ff;
+  --dagster:  #4f9cf9;
+  --dbt:      #ff6a2f;
+  --postgres: #336791;
+  --powerbi:  #f2c811;
+  --ollama:   #1aac74;
+  --contabo:  #e84040;
+  --infra:    #94a3b8;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 300;
+  font-size: 15px;
+  line-height: 1.75;
+  min-height: 100vh;
+}
+
+/* ── PROGRESS ── */
+#prog-bar {
+  position: fixed; top:0; left:0; right:0; height:2px;
+  background: var(--border); z-index: 999;
+}
+#prog-fill {
+  height:100%; width:0;
+  background: linear-gradient(90deg, var(--airbyte), var(--dagster), var(--dbt));
+  transition: width 0.2s;
+}
+
+/* ── SHELL ── */
+.shell {
+  display: grid;
+  grid-template-columns: 270px 1fr;
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  position: sticky; top:0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.sb-brand {
+  padding: 24px 20px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sb-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.sb-title {
+  font-family: 'Fraunces', serif;
+  font-size: 18px; font-weight: 900;
+  line-height: 1.2; color: var(--text);
+}
+
+.sb-sub {
+  font-size: 11px; color: var(--muted);
+  margin-top: 4px; font-style: italic;
+  font-family: 'Fraunces', serif;
+}
+
+/* section groups */
+.sb-group {
+  padding: 14px 12px 4px;
+}
+
+.sb-group-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--dim);
+  padding: 0 8px; margin-bottom: 6px;
+}
+
+.sb-item {
+  display: flex; align-items: center;
+  gap: 10px; padding: 7px 10px;
+  border-radius: 8px; cursor: pointer;
+  transition: all 0.15s; border: 1px solid transparent;
+  margin-bottom: 2px;
+}
+.sb-item:hover { background: var(--surface2); }
+.sb-item.active { background: var(--surface2); border-color: var(--border); }
+
+.sb-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+.sb-item-text { flex:1; }
+.sb-name {
+  font-size: 12.5px; font-weight: 500;
+  color: var(--muted); line-height: 1.2;
+  transition: color 0.15s;
+}
+.sb-item.active .sb-name { color: var(--text); }
+.sb-sub-name { font-size: 10.5px; color: var(--dim); }
+
+.sb-footer {
+  margin-top: auto;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; color: var(--dim);
+}
+
+/* ── MAIN ── */
+.main { overflow-y: auto; }
+
+.page { display: none; animation: fadeUp 0.3s ease; }
+.page.active { display: block; }
+
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(8px); }
+  to { opacity:1; transform: translateY(0); }
+}
+
+/* ── HERO ── */
+.hero {
+  padding: 44px 52px 36px;
+  border-bottom: 1px solid var(--border);
+  position: relative; overflow: hidden;
+}
+
+.hero-glow {
+  position: absolute; top:-60px; right:-60px;
+  width: 320px; height: 320px; border-radius: 50%;
+  pointer-events: none; opacity: 0.06;
+  filter: blur(60px);
+}
+
+.hero-top {
+  display: flex; align-items: center;
+  gap: 14px; margin-bottom: 16px;
+}
+
+.hero-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; padding: 4px 12px;
+  border-radius: 100px; border: 1px solid;
+}
+
+.hero-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--muted); letter-spacing: 0.08em;
+}
+
+.hero h1 {
+  font-family: 'Fraunces', serif;
+  font-size: clamp(28px, 3.5vw, 44px);
+  font-weight: 900; line-height: 1.1;
+  margin-bottom: 14px;
+}
+
+.hero-lead {
+  max-width: 680px; color: #8090b0;
+  font-size: 15px; font-weight: 300;
+  line-height: 1.8;
+}
+
+/* ── CONTENT ── */
+.content {
+  padding: 36px 52px 80px;
+  max-width: 920px;
+}
+
+/* ── ANALOGY BOX ── */
+.analogy {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid;
+  border-radius: 0 10px 10px 0;
+  padding: 18px 22px;
+  margin: 20px 0;
+  display: flex; gap: 14px;
+}
+
+.analogy-icon { font-size: 22px; flex-shrink: 0; line-height: 1; }
+.analogy-body strong {
+  font-family: 'Fraunces', serif;
+  font-size: 14px; font-weight: 600;
+  display: block; margin-bottom: 4px;
+}
+.analogy-body p { font-size: 13.5px; color: #8090b0; line-height: 1.7; }
+
+/* ── TOOL CARD ── */
+.tool-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+  margin: 24px 0;
+  transition: border-color 0.2s;
+}
+.tool-card:hover { border-color: rgba(255,255,255,0.12); }
+
+.tool-header {
+  padding: 18px 24px;
+  display: flex; gap: 16px; align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-logo {
+  width: 44px; height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0; font-weight: 700;
+}
+
+.tool-meta { flex: 1; }
+.tool-name {
+  font-family: 'Fraunces', serif;
+  font-size: 19px; font-weight: 600;
+  margin-bottom: 3px;
+}
+.tool-tagline { font-size: 13px; color: var(--muted); }
+
+.tool-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.tbadge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 2px 8px;
+  border-radius: 4px; border: 1px solid;
+}
+
+.tool-body { padding: 20px 24px; }
+
+.tool-section-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--muted);
+  margin: 18px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.tool-section-title:first-child { margin-top: 0; }
+
+.tool-para {
+  font-size: 14px; color: #8090b0;
+  line-height: 1.75; margin-bottom: 10px;
+}
+
+.tool-para strong { color: var(--text); font-weight: 600; }
+
+/* steps in tool */
+.tsteps { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
+.tstep { display: flex; gap: 12px; }
+.tstep-num {
+  width: 28px; height: 28px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  flex-shrink: 0; margin-top: 1px; font-weight: 500;
+}
+.tstep-body h5 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.tstep-body p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+/* ── SKILL ROW ── */
+.skill-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin: 14px 0;
+}
+
+.skill-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px; padding: 15px 18px;
+}
+
+.skill-top {
+  display: flex; align-items: center;
+  gap: 10px; margin-bottom: 8px;
+}
+
+.skill-icon {
+  width: 30px; height: 30px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; flex-shrink: 0;
+}
+
+.skill-name { font-size: 13px; font-weight: 600; }
+
+.skill-level {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 2px 7px;
+  border-radius: 3px; border: 1px solid;
+  display: inline-block; margin-top: 2px;
+}
+
+.lvl-0 { color: #4ade80; background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.2); }
+.lvl-1 { color: #fbbf24; background: rgba(251,191,36,0.08); border-color: rgba(251,191,36,0.2); }
+.lvl-2 { color: #f87171; background: rgba(248,113,113,0.08); border-color: rgba(248,113,113,0.2); }
+
+.skill-desc { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+/* ── CLAUDE HELP BOX ── */
+.claude-box {
+  background: linear-gradient(135deg, rgba(123,97,255,0.08), rgba(79,156,249,0.05));
+  border: 1px solid rgba(123,97,255,0.25);
+  border-radius: 12px; padding: 20px 24px; margin: 20px 0;
+}
+
+.claude-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+
+.claude-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: rgba(123,97,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+
+.claude-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #a78bfa;
+}
+
+.claude-items { display: flex; flex-direction: column; gap: 7px; }
+.claude-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  font-size: 13.5px; line-height: 1.6;
+}
+.claude-check {
+  color: #a78bfa; flex-shrink: 0; font-size: 13px;
+  margin-top: 2px; font-family: 'JetBrains Mono', monospace;
+}
+.claude-item-text { color: #9090c0; }
+.claude-item-text strong { color: var(--text); }
+
+/* ── CODE ── */
+.code-wrap {
+  background: #080b10; border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; margin: 14px 0;
+}
+.code-top {
+  padding: 8px 16px; background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.code-dots { display:flex; gap:5px; }
+.code-dots span { width:9px; height:9px; border-radius:50%; }
+.d-r{background:#ff5f57;} .d-y{background:#febc2e;} .d-g{background:#28c840;}
+.code-lang { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); }
+pre {
+  padding: 16px 20px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+  line-height: 1.8; overflow-x: auto; color: #b0bdd8;
+}
+.kw{color:#c792ea;} .fn{color:#82aaff;} .str{color:#c3e88d;}
+.cm{color:#546e7a;font-style:italic;} .num{color:#f78c6c;} .var{color:#89ddff;}
+.op{color:#89ddff;}
+
+/* ── CALLOUT ── */
+.callout {
+  border-left: 3px solid; border-radius: 0 8px 8px 0;
+  padding: 14px 18px; margin: 16px 0;
+  font-size: 13.5px; line-height: 1.7;
+}
+.ci  { border-color: var(--dagster); background: rgba(79,156,249,0.05); }
+.cw  { border-color: #fbbf24; background: rgba(251,191,36,0.05); }
+.cs  { border-color: var(--ollama); background: rgba(26,172,116,0.05); }
+.callout strong { font-weight: 600; display:block; margin-bottom:3px; color: var(--text); }
+.callout p { color: var(--muted); }
+
+/* ── SECTION H ── */
+.sec-h {
+  font-family: 'Fraunces', serif;
+  font-size: 18px; font-weight: 600;
+  margin: 28px 0 14px;
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── TABLE ── */
+.tbl { width:100%; border-collapse:collapse; margin:14px 0; font-size:13px; }
+.tbl th {
+  text-align:left; padding:9px 14px;
+  background: var(--surface2);
+  font-family:'JetBrains Mono',monospace; font-size:9.5px;
+  letter-spacing:0.08em; color:var(--muted); text-transform:uppercase;
+}
+.tbl td {
+  padding:10px 14px; border-bottom:1px solid var(--border);
+  color:var(--muted); vertical-align:top;
+}
+.tbl td strong { color:var(--text); }
+.tbl tr:hover td { background: rgba(255,255,255,0.01); }
+
+/* ── FLOW TIMELINE ── */
+.timeline { margin: 16px 0; display: flex; flex-direction: column; gap: 0; }
+.tl-item {
+  display: flex; gap: 16px; position: relative;
+}
+.tl-left { display:flex; flex-direction:column; align-items:center; width:60px; flex-shrink:0; }
+.tl-time {
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  color: var(--muted); white-space:nowrap; padding-top:3px;
+}
+.tl-line {
+  width:1px; flex:1; background:var(--border); margin-top:6px;
+}
+.tl-last .tl-line { display:none; }
+.tl-dot {
+  width:10px; height:10px; border-radius:50%;
+  border:2px solid; position:absolute; left:52px; top:5px;
+}
+.tl-body { padding: 2px 0 20px 10px; flex:1; }
+.tl-body h5 { font-size:14px; font-weight:600; margin-bottom:3px; }
+.tl-body p { font-size:13px; color:var(--muted); line-height:1.6; }
+
+/* ── BOTTOM NAV ── */
+.bottom-nav {
+  display:flex; justify-content:space-between; align-items:center;
+  padding: 24px 52px 40px;
+  border-top: 1px solid var(--border); margin-top:10px;
+}
+.bnav {
+  padding: 9px 20px; border-radius:8px;
+  font-family:'JetBrains Mono',monospace; font-size:10.5px;
+  cursor:pointer; transition:all 0.15s; border:1px solid;
+  letter-spacing:0.04em;
+}
+.bnav-p { background:transparent; color:var(--muted); border-color:var(--border); }
+.bnav-p:hover { color:var(--text); border-color:var(--dim); }
+.bnav-p:disabled { opacity:0.3; cursor:not-allowed; }
+.bnav-n { background:var(--text); color:var(--bg); border-color:var(--text); font-weight:500; }
+.bnav-n:hover { background:#fff; }
+.bc { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); }
+
+/* tags */
+.tag {
+  font-family:'JetBrains Mono',monospace; font-size:9px;
+  padding:2px 7px; border-radius:4px; border:1px solid;
+  display:inline-block; margin:2px;
+}
+
+/* ── OVERVIEW PAGE SPECIFIC ── */
+.overview-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin: 18px 0;
+}
+.ov-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 18px;
+  cursor: pointer; transition: all 0.15s;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.ov-card:hover { transform: translateY(-1px); border-color: var(--dim); }
+.ov-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink:0; margin-top:5px;
+}
+.ov-name { font-size: 13.5px; font-weight: 600; margin-bottom:3px; }
+.ov-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* ── RESPONSIVE ── */
+@media(max-width:760px) {
+  .shell { grid-template-columns:1fr; }
+  .sidebar { position:relative; height:auto; }
+  .hero, .content, .bottom-nav { padding-left:20px; padding-right:20px; }
+  .skill-grid { grid-template-columns:1fr; }
+  .overview-grid { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="prog-bar"><div id="prog-fill"></div></div>
+
+<div class="shell">
+
+<!-- ══ SIDEBAR ══ -->
+<aside class="sidebar">
+  <div class="sb-brand">
+    <div class="sb-label">Melbourne SMB · Analytics Stack</div>
+    <div class="sb-title">Full Stack<br>Breakdown</div>
+    <div class="sb-sub">v1.0 · March 2026</div>
+  </div>
+
+  <div class="sb-group">
+    <div class="sb-group-label">Overview</div>
+    <div class="sb-item active" onclick="go(0)" id="si0">
+      <div class="sb-dot" style="background:#94a3b8"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">The Big Picture</div>
+        <div class="sb-sub-name">What this all means</div>
+      </div>
+    </div>
+    <div class="sb-item" onclick="go(1)" id="si1">
+      <div class="sb-dot" style="background:#e84040"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">Infrastructure (Contabo)</div>
+        <div class="sb-sub-name">Your servers & hosting</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb-group">
+    <div class="sb-group-label">The Pipeline Tools</div>
+    <div class="sb-item" onclick="go(2)" id="si2">
+      <div class="sb-dot" style="background:#7b61ff"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">Airbyte</div>
+        <div class="sb-sub-name">Data ingestion engine</div>
+      </div>
+    </div>
+    <div class="sb-item" onclick="go(3)" id="si3">
+      <div class="sb-dot" style="background:#4f9cf9"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">Dagster</div>
+        <div class="sb-sub-name">Pipeline orchestrator</div>
+      </div>
+    </div>
+    <div class="sb-item" onclick="go(4)" id="si4">
+      <div class="sb-dot" style="background:#ff6a2f"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">dbt Core + dbt-ui</div>
+        <div class="sb-sub-name">Data transformation</div>
+      </div>
+    </div>
+    <div class="sb-item" onclick="go(5)" id="si5">
+      <div class="sb-dot" style="background:#336791"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">PostgreSQL + Extensions</div>
+        <div class="sb-sub-name">Analytics warehouse</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb-group">
+    <div class="sb-group-label">Output & AI</div>
+    <div class="sb-item" onclick="go(6)" id="si6">
+      <div class="sb-dot" style="background:#f2c811"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">Power BI</div>
+        <div class="sb-sub-name">Dashboards & reports</div>
+      </div>
+    </div>
+    <div class="sb-item" onclick="go(7)" id="si7">
+      <div class="sb-dot" style="background:#1aac74"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">Ollama (Local AI)</div>
+        <div class="sb-sub-name">Automated insights</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb-group">
+    <div class="sb-group-label">Operations</div>
+    <div class="sb-item" onclick="go(8)" id="si8">
+      <div class="sb-dot" style="background:#94a3b8"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">Daily Pipeline Flow</div>
+        <div class="sb-sub-name">What runs & when</div>
+      </div>
+    </div>
+    <div class="sb-item" onclick="go(9)" id="si9">
+      <div class="sb-dot" style="background:#94a3b8"></div>
+      <div class="sb-item-text">
+        <div class="sb-name">Your Role & Roadmap</div>
+        <div class="sb-sub-name">What you need to do</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb-footer">10 sections · Click to navigate</div>
+</aside>
+
+<!-- ══ MAIN ══ -->
+<main class="main" id="main">
+
+<!-- ══════════════════════════════════════
+     PAGE 0 — THE BIG PICTURE
+══════════════════════════════════════ -->
+<div class="page active" id="p0">
+  <div class="hero">
+    <div class="hero-glow" style="background:#94a3b8"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:#94a3b8;border-color:#3a4460;background:rgba(148,163,184,0.08);">Overview</span>
+      <span class="hero-num">Document: Data Analytics Solution Stack v1.0</span>
+    </div>
+    <h1>The Big Picture — What Is This All About?</h1>
+    <p class="hero-lead">This document is your client's complete blueprint for a data pipeline. Before diving into individual tools, let's understand what the whole system does in plain English — no jargon, no acronyms.</p>
+  </div>
+
+  <div class="content">
+
+    <div class="analogy" style="border-left-color:#4f9cf9;">
+      <div class="analogy-icon">🏭</div>
+      <div class="analogy-body">
+        <strong>The Factory Analogy</strong>
+        <p>Imagine a factory that turns raw materials into finished products. Raw data arrives from 7 different suppliers (Firebase, GA4, AdMob, AppLovin, Unity, Meta Ads, TikTok). The factory processes it through three assembly lines (Bronze → Silver → Gold), and the finished product is a beautiful set of business dashboards that tell the CEO exactly how the company is performing — every single morning.</p>
+      </div>
+    </div>
+
+    <div class="sec-h">🌍 Who Is The Client?</div>
+    <p style="color:var(--muted);font-size:14px;line-height:1.8;margin-bottom:14px;">A <strong style="color:var(--text)">Melbourne-based small/medium business (SMB)</strong> that develops mobile and gaming apps. They publish apps across multiple platforms and make money through advertising (AdMob, AppLovin) and paid user acquisition (Meta Ads, TikTok Ads). Currently, they have no unified view of their data — they log into 7 different portals and manually copy numbers into spreadsheets. This pipeline fixes that.</p>
+
+    <div class="sec-h">🗂️ The Complete Technology Stack</div>
+
+    <table class="tbl">
+      <thead><tr><th>Layer</th><th>Tool</th><th>What It Does (Plain English)</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Servers</strong></td><td><strong>Contabo VPS</strong></td><td>Two rented computers in Sydney that run everything</td><td>~$50/mo</td></tr>
+        <tr><td><strong>Ingestion</strong></td><td><strong>Airbyte</strong></td><td>Automatically pulls data from all 7 sources every day</td><td>Free (open-source)</td></tr>
+        <tr><td><strong>Orchestration</strong></td><td><strong>Dagster</strong></td><td>The "conductor" — makes sure everything runs in the right order</td><td>Free (open-source)</td></tr>
+        <tr><td><strong>Transformation</strong></td><td><strong>dbt Core</strong></td><td>Cleans and reshapes data using SQL code</td><td>Free (open-source)</td></tr>
+        <tr><td><strong>dbt GUI</strong></td><td><strong>dbt-ui</strong></td><td>A web browser interface for dbt so you don't always need the terminal</td><td>Free (open-source)</td></tr>
+        <tr><td><strong>Database</strong></td><td><strong>PostgreSQL + TimescaleDB + Citus</strong></td><td>The warehouse where all cleaned data lives</td><td>Free (open-source)</td></tr>
+        <tr><td><strong>Storage</strong></td><td><strong>Contabo Object Storage</strong></td><td>Cloud storage for raw data backups (optional)</td><td>~$5/mo</td></tr>
+        <tr><td><strong>Dashboards</strong></td><td><strong>Power BI</strong></td><td>The business dashboards the CEO and team see</td><td>Commercial licence</td></tr>
+        <tr><td><strong>AI</strong></td><td><strong>Ollama</strong></td><td>A local AI that reads the data and writes daily Slack summaries</td><td>Free (open-source)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout ci">
+      <strong>💡 Why everything is self-hosted (not Microsoft Fabric / AWS)</strong>
+      <p>This client chose to run everything on their own rented servers (Contabo) instead of a managed cloud like Azure or AWS. The reason: <strong>85–90% cost savings</strong>. Microsoft Fabric would cost $2,000–$6,000/month for this scale. This self-hosted stack runs for approximately $100–200/month total. The trade-off is that <em>you</em> are responsible for maintaining the servers instead of Microsoft doing it.</p>
+    </div>
+
+    <div class="sec-h">📊 What Data Comes In?</div>
+    <div class="overview-grid">
+      <div class="ov-card"><div class="ov-dot" style="background:#4285f4"></div><div><div class="ov-name">Google Analytics 4 (GA4)</div><div class="ov-desc">User sessions, screen views, events, conversions in the app</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#f4a700"></div><div><div class="ov-name">Firebase</div><div class="ov-desc">App events — crashes, purchases, in-app actions, user IDs</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#34a853"></div><div><div class="ov-name">AdMob</div><div class="ov-desc">In-app ad revenue: eCPM, impressions, fill rates by app</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#e0523a"></div><div><div class="ov-name">AppLovin MAX</div><div class="ov-desc">Mediation ad revenue, waterfall performance, installs</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#aaa"></div><div><div class="ov-name">Unity Ads</div><div class="ov-desc">Rewarded video ad revenue and install campaign data</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#1877f2"></div><div><div class="ov-name">Meta Ads (Facebook/Instagram)</div><div class="ov-desc">Paid user acquisition: spend, impressions, installs, CAC</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#ff0050"></div><div><div class="ov-name">TikTok Ads</div><div class="ov-desc">Paid user acquisition via TikTok campaigns: spend, ROAS</div></div></div>
+    </div>
+
+    <div class="sec-h">📤 What Comes Out?</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:12px;">Five Power BI dashboards that refresh every morning (and near real-time every 15 minutes for live campaign data):</p>
+    <div class="overview-grid">
+      <div class="ov-card"><div class="ov-dot" style="background:#f2c811"></div><div><div class="ov-name">Executive Overview</div><div class="ov-desc">Total revenue, user growth, top campaigns, DAU</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#f2c811"></div><div><div class="ov-name">Campaign ROI Analysis</div><div class="ov-desc">ROAS, CAC, spend vs revenue by channel</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#f2c811"></div><div><div class="ov-name">User Retention & LTV</div><div class="ov-desc">D1/D7/D30 cohorts, lifetime value, churn</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#f2c811"></div><div><div class="ov-name">Platform Performance</div><div class="ov-desc">iOS vs Android, crash rates, version adoption</div></div></div>
+      <div class="ov-card"><div class="ov-dot" style="background:#f2c811"></div><div><div class="ov-name">Real-Time Metrics</div><div class="ov-desc">Live campaign spend, current-hour performance</div></div></div>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" disabled>← Previous</button>
+    <span class="bc">1 / 10</span>
+    <button class="bnav bnav-n" onclick="go(1)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 1 — INFRASTRUCTURE
+══════════════════════════════════════ -->
+<div class="page" id="p1">
+  <div class="hero">
+    <div class="hero-glow" style="background:#e84040"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:var(--contabo);border-color:rgba(232,64,64,0.3);background:rgba(232,64,64,0.08);">Infrastructure</span>
+    </div>
+    <h1>Contabo VPS — Your Rented Servers</h1>
+    <p class="hero-lead">Before any software runs, you need computers to run it on. Instead of buying physical servers or using expensive managed clouds, the plan uses Contabo — a budget European hosting provider with a Sydney datacenter — to rent two virtual private servers (VPS).</p>
+  </div>
+  <div class="content">
+
+    <div class="analogy" style="border-left-color:#e84040;">
+      <div class="analogy-icon">🖥️</div>
+      <div class="analogy-body">
+        <strong>Plain English: What is a VPS?</strong>
+        <p>A VPS is like renting a desk and computer in a giant office building (the datacenter). The building handles electricity, cooling, and internet. You get your own dedicated space with guaranteed resources. You can install any software you want, run it 24/7, and access it remotely from your laptop via SSH (a secure terminal connection).</p>
+      </div>
+    </div>
+
+    <div class="sec-h">🖥️ Two Servers, Two Jobs</div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-logo" style="background:rgba(232,64,64,0.15);color:#e84040;">⚡</div>
+        <div class="tool-meta">
+          <div class="tool-name" style="color:#e84040;">App VPS — Cloud VPS 20</div>
+          <div class="tool-tagline">Runs all the pipeline software: Airbyte, Dagster, dbt-ui, Ollama</div>
+          <div class="tool-badges">
+            <span class="tbadge" style="color:#e84040;border-color:rgba(232,64,64,0.3);">6 CPU cores</span>
+            <span class="tbadge" style="color:#e84040;border-color:rgba(232,64,64,0.3);">12GB RAM</span>
+            <span class="tbadge" style="color:#e84040;border-color:rgba(232,64,64,0.3);">100GB SSD</span>
+            <span class="tbadge" style="color:#e84040;border-color:rgba(232,64,64,0.3);">Sydney</span>
+          </div>
+        </div>
+      </div>
+      <div class="tool-body">
+        <div class="tool-para">This server is the <strong>"brain"</strong> of the system. It runs a tool called <strong>Docker Compose</strong>, which lets you run multiple software applications side-by-side as isolated containers. Think of Docker containers like separate rooms in the same building — Airbyte lives in room 8000, Dagster in room 3000, dbt-ui in room 3001, and Ollama in room 11434. (The "room numbers" are port numbers.)</div>
+        <div class="tool-para">You access these apps from your browser: <code style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#89ddff;">http://SERVER_IP:3000</code> opens Dagster, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#89ddff;">http://SERVER_IP:8000</code> opens Airbyte, etc.</div>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-logo" style="background:rgba(51,103,145,0.15);color:#336791;">🗄️</div>
+        <div class="tool-meta">
+          <div class="tool-name" style="color:#336791;">DB VPS — Cloud VPS 30</div>
+          <div class="tool-tagline">Dedicated database server — stores all your data</div>
+          <div class="tool-badges">
+            <span class="tbadge" style="color:#336791;border-color:rgba(51,103,145,0.3);">8 CPU cores</span>
+            <span class="tbadge" style="color:#336791;border-color:rgba(51,103,145,0.3);">24GB RAM</span>
+            <span class="tbadge" style="color:#336791;border-color:rgba(51,103,145,0.3);">400GB NVMe SSD</span>
+            <span class="tbadge" style="color:#336791;border-color:rgba(51,103,145,0.3);">Sydney</span>
+          </div>
+        </div>
+      </div>
+      <div class="tool-body">
+        <div class="tool-para">This server's only job is to run <strong>PostgreSQL</strong> — the database. Databases are performance-sensitive and need dedicated resources. Putting it on a separate server means the database isn't competing with Airbyte and Dagster for CPU and RAM.</div>
+        <div class="tool-para">The two servers communicate over an internal connection on <strong>port 5432</strong> (the PostgreSQL port). The App VPS writes data to the DB VPS, and Power BI on your laptop reads data from the DB VPS.</div>
+        <div class="tool-para"><strong>300GB</strong> of the 400GB disk is allocated to the analytics database — enough to store approximately 2–3 years of daily data at current volumes.</div>
+      </div>
+    </div>
+
+    <div class="sec-h">🔐 Security Setup</div>
+    <div class="callout cw">
+      <strong>⚠️ Security is your first job</strong>
+      <p>Before installing any software, you configure firewalls (UFW on Linux) so that the database port (5432) only accepts connections from the App VPS's IP address — not the entire internet. This is critical. An unsecured PostgreSQL port is one of the most common ways servers get compromised.</p>
+    </div>
+
+    <div class="sec-h">🎓 Skills You Need</div>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(232,64,64,0.12);">🐧</div>
+          <div><div class="skill-name">Linux Command Line (SSH)</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">You'll SSH into both servers and run bash commands to install software, configure files, check logs. You need to be comfortable navigating the Linux terminal — creating files, editing configs with nano/vim, running scripts.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(79,156,249,0.12);">🐳</div>
+          <div><div class="skill-name">Docker & Docker Compose</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">Docker is how all the tools (Airbyte, Dagster, etc.) are installed and run on the App VPS. You use a docker-compose.yml config file to define them all, then one command spins everything up. You also need to know how to check logs, restart containers, and update images.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(51,103,145,0.12);">🔒</div>
+          <div><div class="skill-name">Basic Linux Security</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Setting up UFW firewall rules, SSH key authentication, and editing PostgreSQL's pg_hba.conf. These are copy-paste-level tasks with clear documentation, but you need to understand what each rule does.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(26,172,116,0.12);">🌐</div>
+          <div><div class="skill-name">Networking Basics</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Understanding IP addresses, ports, and how server-to-server connections work. You don't need to be a network engineer — but you need to understand why port 5432 needs to be open between servers but not to the public internet.</div>
+      </div>
+    </div>
+
+    <div class="claude-box">
+      <div class="claude-header">
+        <div class="claude-icon">✦</div>
+        <div class="claude-title">How I Can Help You With This</div>
+      </div>
+      <div class="claude-items">
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the complete docker-compose.yml</strong> for the App VPS with all services configured correctly</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write all the Linux commands</strong> for server setup, firewall config, PostgreSQL installation step-by-step</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Debug errors</strong> — paste any error message you get in the terminal and I'll explain what it means and how to fix it</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Explain every command</strong> before you run it so you understand what it does — never run something blindly</div></div>
+        <div class="claude-item"><div class="claude-check">✗</div><div class="claude-item-text" style="color:#555;"><em>I cannot SSH into the server for you — that physical access to the terminal is yours alone</em></div></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(0)">← Previous</button>
+    <span class="bc">2 / 10</span>
+    <button class="bnav bnav-n" onclick="go(2)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 2 — AIRBYTE
+══════════════════════════════════════ -->
+<div class="page" id="p2">
+  <div class="hero">
+    <div class="hero-glow" style="background:#7b61ff"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:var(--airbyte);border-color:rgba(123,97,255,0.3);background:rgba(123,97,255,0.08);">Ingestion Layer</span>
+    </div>
+    <h1>Airbyte — The Data Collector</h1>
+    <p class="hero-lead">Airbyte is an open-source tool that knows how to talk to hundreds of different data sources (APIs, databases, files) and copy their data into your database automatically. It's the first step in the pipeline — getting data from the outside world into your system.</p>
+  </div>
+  <div class="content">
+
+    <div class="analogy" style="border-left-color:#7b61ff;">
+      <div class="analogy-icon">🚚</div>
+      <div class="analogy-body">
+        <strong>Plain English: What Airbyte does</strong>
+        <p>Imagine you have 7 suppliers who all speak different languages and send invoices in different formats. Airbyte is a universal translator and delivery driver. It knows how to speak to Google, Meta, TikTok, Firebase etc. in their own language (their API), grab the data you need, convert it into a consistent format, and drop it in your database — every day, automatically.</p>
+      </div>
+    </div>
+
+    <div class="sec-h">🔌 What Airbyte Connects to For This Client</div>
+    <table class="tbl">
+      <thead><tr><th>Source</th><th>What it pulls</th><th>How often</th><th>Data size/day</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Google Analytics 4</strong></td><td>User sessions, events, conversions</td><td>Daily (2:00 AM)</td><td>~500MB</td></tr>
+        <tr><td><strong>Firebase (via BigQuery)</strong></td><td>App events, crashes, user IDs</td><td>Daily (2:05 AM)</td><td>~300MB</td></tr>
+        <tr><td><strong>Google AdMob</strong></td><td>Ad revenue, eCPM, impressions</td><td>Daily (2:10 AM)</td><td>~50MB</td></tr>
+        <tr><td><strong>Meta Ads</strong></td><td>Campaign spend, impressions, installs</td><td>Daily + every 15 min</td><td>~50MB</td></tr>
+        <tr><td><strong>TikTok Ads</strong></td><td>Campaign performance, spend, ROAS</td><td>Daily (2:15 AM)</td><td>~30MB</td></tr>
+        <tr><td><strong>AppLovin MAX</strong></td><td>Ad mediation revenue, install postbacks</td><td>Daily (2:15 AM)</td><td>~80MB</td></tr>
+        <tr><td><strong>Unity Ads</strong></td><td>Rewarded video revenue, campaign data</td><td>Daily (2:15 AM)</td><td>~40MB</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sec-h">⚙️ How Airbyte Works — Step by Step</div>
+    <div class="tsteps">
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(123,97,255,0.15);color:#7b61ff;">1</div>
+        <div class="tstep-body"><h5>You configure a "Connection" in the UI</h5><p>Open Airbyte at http://SERVER_IP:8000 in your browser. Click "New Connection", choose the source (e.g. Google Analytics 4), enter your credentials (API key, account ID), choose Postgres as the destination, and set a sync schedule.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(123,97,255,0.15);color:#7b61ff;">2</div>
+        <div class="tstep-body"><h5>Airbyte calls the source API</h5><p>At the scheduled time, Airbyte makes authenticated HTTP requests to (e.g.) Google's API asking for yesterday's analytics data. It handles API pagination, rate limits, and authentication automatically — you don't write this code.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(123,97,255,0.15);color:#7b61ff;">3</div>
+        <div class="tstep-body"><h5>Incremental sync — only new data</h5><p>Airbyte is configured for "incremental" mode, meaning it tracks a watermark (like a date or ID) and only pulls <em>new rows</em> since the last sync. This keeps it fast and avoids re-pulling the entire history every day.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(123,97,255,0.15);color:#7b61ff;">4</div>
+        <div class="tstep-body"><h5>Data lands in Postgres staging tables</h5><p>Airbyte writes the raw JSON/CSV data into PostgreSQL staging tables like <code style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#89ddff;">raw_ga4_stg</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#89ddff;">raw_firebase_stg</code>, etc. This is the Bronze layer — raw and untouched.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(123,97,255,0.15);color:#7b61ff;">5</div>
+        <div class="tstep-body"><h5>Dagster monitors the sync status</h5><p>Airbyte reports success/failure back to Dagster. If a sync fails, Dagster raises an alert and stops the downstream pipeline steps from running on incomplete data.</p></div>
+      </div>
+    </div>
+
+    <div class="sec-h">🎓 Skills You Need</div>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(123,97,255,0.12);">🖱️</div>
+          <div><div class="skill-name">Airbyte UI (No-Code)</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Most of Airbyte is point-and-click. You go to the web UI, select a connector from a dropdown list, fill in the credentials, pick your destination, and set a schedule. No coding needed for standard sources.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(123,97,255,0.12);">🔑</div>
+          <div><div class="skill-name">API Authentication</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">Each source needs credentials: OAuth2 tokens, API keys, service account JSON files, etc. You need to know how to generate these in each platform's developer console and how to enter them in Airbyte securely.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(123,97,255,0.12);">🐍</div>
+          <div><div class="skill-name">Python (for custom connectors)</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">If a source doesn't have an Airbyte connector (e.g. a niche API), you write a custom Python script inside Airbyte's "Custom HTTP" connector. Basic Python + requests library is sufficient.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(123,97,255,0.12);">🐛</div>
+          <div><div class="skill-name">Log Reading & Debugging</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">When a sync fails, Airbyte shows you the error logs in the UI. You need to read them and understand whether it's an auth problem, an API rate limit, or a schema mismatch. Then fix it.</div>
+      </div>
+    </div>
+
+    <div class="claude-box">
+      <div class="claude-header"><div class="claude-icon">✦</div><div class="claude-title">How I Can Help You With Airbyte</div></div>
+      <div class="claude-items">
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Walk you through setting up each connector</strong> — I know the GA4, Firebase, Meta, TikTok, AdMob, AppLovin and Unity connector configs in detail</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write custom Python connectors</strong> for any source Airbyte doesn't natively support</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Diagnose sync errors</strong> — paste the Airbyte error log and I'll tell you exactly what's wrong</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Help get API credentials</strong> for each platform — step-by-step instructions for GA4, Meta, TikTok developer portals</div></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(1)">← Previous</button>
+    <span class="bc">3 / 10</span>
+    <button class="bnav bnav-n" onclick="go(3)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 3 — DAGSTER
+══════════════════════════════════════ -->
+<div class="page" id="p3">
+  <div class="hero">
+    <div class="hero-glow" style="background:#4f9cf9"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:var(--dagster);border-color:rgba(79,156,249,0.3);background:rgba(79,156,249,0.08);">Orchestration Layer</span>
+    </div>
+    <h1>Dagster — The Pipeline Conductor</h1>
+    <p class="hero-lead">Dagster is the "brain" that sequences every step in the right order at the right time. It says: "At 2 AM, start Airbyte. When Airbyte finishes, run dbt Silver. When that's done, run dbt Gold. Then run quality checks. Then refresh Power BI." If anything fails, it stops and alerts you.</p>
+  </div>
+  <div class="content">
+
+    <div class="analogy" style="border-left-color:#4f9cf9;">
+      <div class="analogy-icon">🎼</div>
+      <div class="analogy-body">
+        <strong>Plain English: What Dagster does</strong>
+        <p>Dagster is like a stage manager for a theatre production. The actors (Airbyte, dbt, Power BI) all know their lines, but they need someone to tell them when to go on stage, in what order, and to stop the show if an actor doesn't show up. Dagster also keeps a history of every performance — so you can look back and see exactly what happened at 2:35 AM last Tuesday.</p>
+      </div>
+    </div>
+
+    <div class="sec-h">🧩 Key Dagster Concepts</div>
+    <div class="tsteps">
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(79,156,249,0.15);color:#4f9cf9;">◆</div>
+        <div class="tstep-body"><h5>Assets</h5><p>In Dagster, everything is an "asset" — a piece of data that gets created or updated. An Airbyte sync is an asset. A dbt model (e.g. <code style="font-size:11px;color:#89ddff;font-family:'JetBrains Mono',monospace;">silver.ga4_events</code>) is an asset. A Power BI dashboard is an asset. Dagster tracks the state of every asset and shows you a visual graph of how they all connect.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(79,156,249,0.15);color:#4f9cf9;">◆</div>
+        <div class="tstep-body"><h5>Asset Graph (DAG)</h5><p>Dagster draws a visual diagram called a DAG (Directed Acyclic Graph) showing which assets depend on which. You can see: GA4 raw data → Silver GA4 table → Gold app metrics → Power BI dashboard. If you change the GA4 model, Dagster shows you which downstream dashboards will be affected.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(79,156,249,0.15);color:#4f9cf9;">◆</div>
+        <div class="tstep-body"><h5>Schedules & Sensors</h5><p>Schedules trigger at fixed times (e.g. "run the nightly batch at 2 AM"). Sensors watch for events (e.g. "if new rows appear in raw_applovin_stg, trigger dbt"). Together they cover both time-based and event-driven pipelines.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(79,156,249,0.15);color:#4f9cf9;">◆</div>
+        <div class="tstep-body"><h5>Integrations with Airbyte and dbt</h5><p>Dagster has official plugins (<code style="font-size:11px;color:#89ddff;font-family:'JetBrains Mono',monospace;">dagster-airbyte</code> and <code style="font-size:11px;color:#89ddff;font-family:'JetBrains Mono',monospace;">dagster-dbt</code>) that automatically import Airbyte connections and dbt models as Dagster assets. You don't manually wire them — Dagster discovers them automatically.</p></div>
+      </div>
+    </div>
+
+    <div class="sec-h">📝 What You Write in Dagster</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:12px;">Dagster is configured in Python. The main file is <code style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#89ddff;">definitions.py</code>:</p>
+
+    <div class="code-wrap">
+      <div class="code-top"><div class="code-dots"><span class="d-r"></span><span class="d-y"></span><span class="d-g"></span></div><span class="code-lang">Python — dagster definitions.py (simplified)</span></div>
+      <pre><span class="kw">from</span> dagster <span class="kw">import</span> Definitions, ScheduleDefinition, AssetSelection
+<span class="kw">from</span> dagster_airbyte <span class="kw">import</span> load_assets_from_airbyte_instance
+<span class="kw">from</span> dagster_dbt <span class="kw">import</span> DbtCliResource, dbt_assets
+
+<span class="cm"># Auto-load ALL Airbyte connections as Dagster assets</span>
+airbyte_assets = <span class="fn">load_assets_from_airbyte_instance</span>(
+    airbyte_instance,
+    asset_key_prefix=[<span class="str">"airbyte"</span>]
+)
+
+<span class="cm"># Auto-load ALL dbt models as Dagster assets</span>
+<span class="kw">@dbt_assets</span>(manifest=dbt_manifest)
+<span class="kw">def</span> <span class="fn">mobile_analytics_dbt_assets</span>(context, dbt: DbtCliResource):
+    <span class="kw">yield from</span> dbt.<span class="fn">cli</span>([<span class="str">"run"</span>], context=context).<span class="fn">stream</span>()
+
+<span class="cm"># Nightly batch schedule: run everything at 2 AM</span>
+nightly_schedule = <span class="fn">ScheduleDefinition</span>(
+    name=<span class="str">"nightly_batch"</span>,
+    cron_schedule=<span class="str">"0 2 * * *"</span>,  <span class="cm"># 2:00 AM every day</span>
+    target=<span class="fn">AssetSelection</span>.<span class="fn">all</span>()
+)
+
+defs = <span class="fn">Definitions</span>(
+    assets=[airbyte_assets, mobile_analytics_dbt_assets],
+    schedules=[nightly_schedule],
+)</pre>
+    </div>
+
+    <div class="sec-h">🎓 Skills You Need</div>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(79,156,249,0.12);">🐍</div>
+          <div><div class="skill-name">Python (Intermediate)</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">Dagster's configuration is written in Python. You need to understand Python functions, decorators (@), imports, and basic class usage. You don't need to be a Python expert — Dagster's patterns are repetitive once you learn them.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(79,156,249,0.12);">📅</div>
+          <div><div class="skill-name">Cron Syntax</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Schedules use cron expressions like <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">"0 2 * * *"</code> (2 AM daily). This is a 5-field notation for time. There are easy online tools (crontab.guru) to translate cron to plain English.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(79,156,249,0.12);">🔗</div>
+          <div><div class="skill-name">Dependency Thinking</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">You need to understand and communicate which steps depend on which. "dbt Silver cannot run until Airbyte finishes" is a dependency. Dagster enforces these automatically once you define them, but you need to design the correct order.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(79,156,249,0.12);">🖥️</div>
+          <div><div class="skill-name">Dagster UI Navigation</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Dagster has a visual UI at port 3000. You'll use it daily: viewing the asset graph, checking run history, reading failure logs, manually re-running failed steps. It's intuitive — like a control panel for your pipeline.</div>
+      </div>
+    </div>
+
+    <div class="claude-box">
+      <div class="claude-header"><div class="claude-icon">✦</div><div class="claude-title">How I Can Help You With Dagster</div></div>
+      <div class="claude-items">
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the complete definitions.py</strong> wiring Airbyte + dbt + schedules + sensors together</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write quality check jobs</strong> in Python that run after dbt and block the pipeline if data looks wrong</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write Slack alert integrations</strong> that notify your team when a pipeline step fails</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Explain any Dagster error</strong> — paste the failure log from the UI and I'll diagnose it</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Design the live 15-minute pipeline</strong> that polls Meta and GA4 APIs for real-time campaign data</div></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(2)">← Previous</button>
+    <span class="bc">4 / 10</span>
+    <button class="bnav bnav-n" onclick="go(4)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 4 — DBT
+══════════════════════════════════════ -->
+<div class="page" id="p4">
+  <div class="hero">
+    <div class="hero-glow" style="background:#ff6a2f"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:var(--dbt);border-color:rgba(255,106,47,0.3);background:rgba(255,106,47,0.08);">Transformation Layer</span>
+    </div>
+    <h1>dbt Core + dbt-ui — The Data Transformer</h1>
+    <p class="hero-lead">dbt (Data Build Tool) takes the raw messy data that Airbyte dropped in Postgres and transforms it into clean, business-ready tables using SQL. It's your main engineering tool — this is where the most analytical thinking happens and where you'll write the most code.</p>
+  </div>
+  <div class="content">
+
+    <div class="analogy" style="border-left-color:#ff6a2f;">
+      <div class="analogy-icon">👨‍🍳</div>
+      <div class="analogy-body">
+        <strong>Plain English: What dbt does</strong>
+        <p>dbt is the chef in the kitchen. Airbyte delivered the raw ingredients (vegetables, meat, spices — all unprocessed). dbt takes those ingredients and follows recipes (SQL files) to cook them into finished dishes. Each SQL file is one recipe, and the finished dishes are the clean tables that Power BI serves to the business.</p>
+      </div>
+    </div>
+
+    <div class="sec-h">🏗️ How dbt Works</div>
+    <div class="tsteps">
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(255,106,47,0.15);color:#ff6a2f;">1</div>
+        <div class="tstep-body"><h5>You write SQL files called "models"</h5><p>Each SQL file is a <em>model</em> — a SELECT query that defines a table. The file name becomes the table name. <code style="font-size:11px;color:#89ddff;font-family:'JetBrains Mono',monospace;">silver/stg_ga4_events.sql</code> creates the <code style="font-size:11px;color:#89ddff;font-family:'JetBrains Mono',monospace;">silver.stg_ga4_events</code> table.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(255,106,47,0.15);color:#ff6a2f;">2</div>
+        <div class="tstep-body"><h5>Models reference other models</h5><p>You use <code style="font-size:11px;color:#89ddff;font-family:'JetBrains Mono',monospace;">{{ ref('model_name') }}</code> to reference other dbt models. dbt automatically figures out the build order — it knows Silver must be built before Gold, without you needing to specify that manually.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(255,106,47,0.15);color:#ff6a2f;">3</div>
+        <div class="tstep-body"><h5>dbt compiles and runs the SQL</h5><p>When you run <code style="font-size:11px;color:#89ddff;font-family:'JetBrains Mono',monospace;">dbt run</code>, it takes your SQL files, adds CREATE TABLE / INSERT logic around them, and executes them on PostgreSQL in the correct dependency order. All in seconds.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(255,106,47,0.15);color:#ff6a2f;">4</div>
+        <div class="tstep-body"><h5>dbt test checks the output</h5><p>dbt has a built-in testing framework. You write tests in YAML files: "revenue should never be negative", "user_id should never be null", "store should be one of these 5 values". Run <code style="font-size:11px;color:#89ddff;font-family:'JetBrains Mono',monospace;">dbt test</code> and it runs all assertions automatically.</p></div>
+      </div>
+    </div>
+
+    <div class="sec-h">📂 Project Structure for This Client</div>
+    <div class="code-wrap">
+      <div class="code-top"><div class="code-dots"><span class="d-r"></span><span class="d-y"></span><span class="d-g"></span></div><span class="code-lang">dbt project: mobile_analytics/</span></div>
+      <pre><span class="var">mobile_analytics/</span>
+├── <span class="str">models/</span>
+│   ├── <span class="str">silver/</span>                    <span class="cm"># Bronze → Silver (cleaning)</span>
+│   │   ├── stg_ga4_events.sql       <span class="cm"># Parse GA4 JSON, cast types</span>
+│   │   ├── stg_ad_revenue.sql       <span class="cm"># Unify AdMob + AppLovin revenue</span>
+│   │   ├── stg_daily_sessions.sql   <span class="cm"># Deduplicate session events</span>
+│   │   └── stg_app_installs.sql     <span class="cm"># Join install events with campaigns</span>
+│   └── <span class="str">gold/</span>                      <span class="cm"># Silver → Gold (business KPIs)</span>
+│       ├── app_metrics.sql          <span class="cm"># Daily KPIs by app + platform</span>
+│       ├── campaign_roi.sql         <span class="cm"># ROAS, CPI, spend vs revenue</span>
+│       ├── ltv_cohorts.sql          <span class="cm"># 7/30/90-day lifetime value</span>
+│       └── retention_funnels.sql    <span class="cm"># D1, D7, D30 retention %</span>
+├── <span class="str">tests/</span>
+│   └── schema.yml                   <span class="cm"># Data quality assertions</span>
+└── <span class="str">dbt_project.yml</span>                <span class="cm"># Project config</span></pre>
+    </div>
+
+    <div class="sec-h">🖥️ dbt-ui — The Visual Interface</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:12px;">dbt Core is a command-line tool — you run it from the terminal. But dbt-ui provides a lightweight web browser UI (at port 3001) so you can browse models, see the lineage graph, and trigger runs without opening a terminal. Think of it as a dashboard for your dbt project.</p>
+
+    <div class="callout ci">
+      <strong>💡 dbt Core vs dbt Cloud</strong>
+      <p>dbt Cloud is the paid SaaS version ($100–300/month). This stack uses dbt Core, which is 100% free. The only difference is you manage your own execution environment. dbt-ui covers the main visual features you'd need from dbt Cloud, and Dagster handles the scheduling.</p>
+    </div>
+
+    <div class="sec-h">🎓 Skills You Need</div>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(255,106,47,0.12);">🛢️</div>
+          <div><div class="skill-name">SQL (Intermediate–Advanced)</div><span class="skill-level lvl-2">Advanced</span></div>
+        </div>
+        <div class="skill-desc">This is the core skill of the transformation layer. You need comfortable SQL: JOINs, GROUP BY, CASE WHEN, window functions (for cohorts and retention), CTEs (WITH clauses). The more complex KPIs like LTV cohorts and retention funnels require window functions specifically.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(255,106,47,0.12);">⚒️</div>
+          <div><div class="skill-name">dbt Concepts & Jinja</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">dbt adds a thin templating layer (Jinja) to SQL — you use <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#c3e88d;">{{ ref() }}</code> to reference models, <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#c3e88d;">{{ source() }}</code> for raw tables, and macros for reusable logic. It's beginner-friendly — mostly standard SQL with a few additions.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(255,106,47,0.12);">📊</div>
+          <div><div class="skill-name">Data Modelling</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">Understanding how to design Silver and Gold schemas — what a fact table is, what a dimension table is, how to define grain (one row = one what?). This is the analytical design thinking behind the SQL you write.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(255,106,47,0.12);">🧪</div>
+          <div><div class="skill-name">dbt Testing (YAML)</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Writing dbt tests in YAML schema files is very beginner-friendly. You declare assertions like <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#c3e88d;">not_null</code>, <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#c3e88d;">unique</code>, <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#c3e88d;">accepted_values</code> in a structured config file — no SQL or Python needed for standard tests.</div>
+      </div>
+    </div>
+
+    <div class="claude-box">
+      <div class="claude-header"><div class="claude-icon">✦</div><div class="claude-title">How I Can Help You With dbt</div></div>
+      <div class="claude-items">
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write every dbt SQL model</strong> for this client — all Silver staging models and all Gold KPI models including the complex ones (LTV cohorts, retention funnels, ROAS)</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the full schema.yml</strong> with all data quality tests for every table</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Explain any SQL query</strong> in plain English — if you're unsure what a model is doing, paste it and I'll walk through it line by line</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Debug dbt errors</strong> — paste the <code style="font-size:11px;font-family:'JetBrains Mono',monospace;">dbt run</code> output and I'll find the issue</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Design the full star schema</strong> for the Gold layer matching Power BI's needs</div></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(3)">← Previous</button>
+    <span class="bc">5 / 10</span>
+    <button class="bnav bnav-n" onclick="go(5)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 5 — POSTGRES
+══════════════════════════════════════ -->
+<div class="page" id="p5">
+  <div class="hero">
+    <div class="hero-glow" style="background:#336791"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:var(--postgres);border-color:rgba(51,103,145,0.3);background:rgba(51,103,145,0.08);">Warehouse Layer</span>
+    </div>
+    <h1>PostgreSQL + TimescaleDB + Citus — The Data Warehouse</h1>
+    <p class="hero-lead">PostgreSQL is where all the data lives. It's the world's most popular open-source relational database. Two extensions supercharge it for this use case: TimescaleDB makes it fast for time-series data (which app analytics always is), and Citus allows it to scale across multiple servers when data grows.</p>
+  </div>
+  <div class="content">
+
+    <div class="analogy" style="border-left-color:#336791;">
+      <div class="analogy-icon">🏦</div>
+      <div class="analogy-body">
+        <strong>Plain English: Three schemas, three purposes</strong>
+        <p>The database is like a bank with three vaults. The <strong>raw_* staging vault</strong> holds the unprocessed cash Airbyte deposits. The <strong>silver vault</strong> holds sorted, counted, verified bills. The <strong>gold vault</strong> holds the final investment portfolio that Power BI reports on. Each vault has strict access rules — and you only move money forward, never backward.</p>
+      </div>
+    </div>
+
+    <div class="sec-h">🗄️ Database Structure</div>
+    <table class="tbl">
+      <thead><tr><th>Schema</th><th>Tables</th><th>Who writes to it</th><th>Who reads it</th></tr></thead>
+      <tbody>
+        <tr><td><code style="font-family:'JetBrains Mono',monospace;font-size:11px;">raw_*_stg</code></td><td>raw_ga4_stg, raw_firebase_stg, raw_admob_stg...</td><td><strong>Airbyte</strong></td><td>dbt Silver models</td></tr>
+        <tr><td><code style="font-family:'JetBrains Mono',monospace;font-size:11px;">silver.*</code></td><td>ga4_events, ad_revenue, daily_sessions, user_profiles</td><td><strong>dbt</strong></td><td>dbt Gold models</td></tr>
+        <tr><td><code style="font-family:'JetBrains Mono',monospace;font-size:11px;">gold.*</code></td><td>app_metrics, campaign_roi, ltv_cohorts, retention_funnels, rt_metrics</td><td><strong>dbt</strong></td><td>Power BI</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sec-h">⚡ TimescaleDB — Why It Matters</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:12px;">App analytics data is almost always time-series — every row has a timestamp. TimescaleDB is a PostgreSQL extension that automatically partitions tables by time into "chunks" (called hypertables). The benefit: querying "show me last 30 days" only reads last month's chunk, not 3 years of data. <strong>Queries become 10–100x faster</strong>. It also automatically compresses old data by 90%+ to save disk space.</p>
+
+    <div class="code-wrap">
+      <div class="code-top"><div class="code-dots"><span class="d-r"></span><span class="d-y"></span><span class="d-g"></span></div><span class="code-lang">SQL — Setting up a TimescaleDB hypertable</span></div>
+      <pre><span class="cm">-- Create the table normally first</span>
+<span class="kw">CREATE TABLE</span> silver.ga4_events (
+    event_timestamp  TIMESTAMPTZ <span class="kw">NOT NULL</span>,
+    user_pseudo_id   TEXT,
+    event_name       TEXT,
+    platform         TEXT,
+    revenue          DECIMAL(<span class="num">10</span>,<span class="num">4</span>)
+);
+
+<span class="cm">-- Turn it into a TimescaleDB hypertable (partitioned by time)</span>
+<span class="kw">SELECT</span> <span class="fn">create_hypertable</span>(<span class="str">'silver.ga4_events'</span>, <span class="str">'event_timestamp'</span>);
+
+<span class="cm">-- Automatically compress chunks older than 7 days (saves 90% disk)</span>
+<span class="kw">SELECT</span> <span class="fn">add_compression_policy</span>(<span class="str">'silver.ga4_events'</span>, INTERVAL <span class="str">'7 days'</span>);
+
+<span class="cm">-- Auto-delete data older than 90 days from raw staging</span>
+<span class="kw">SELECT</span> <span class="fn">add_retention_policy</span>(<span class="str">'silver.ga4_events'</span>, INTERVAL <span class="str">'90 days'</span>);</pre>
+    </div>
+
+    <div class="sec-h">🌐 Citus — Horizontal Scaling (Future)</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:12px;">Citus is a PostgreSQL extension that distributes tables across multiple servers ("shards") for even larger datasets. For this client it's installed but not heavily used yet — it becomes important when data grows beyond 50GB/day in Phase 3. Enabling it is a single SQL command:</p>
+    <div class="code-wrap">
+      <div class="code-top"><div class="code-dots"><span class="d-r"></span><span class="d-y"></span><span class="d-g"></span></div><span class="code-lang">SQL — Enabling Citus distribution</span></div>
+      <pre><span class="cm">-- Shard the gold.app_metrics table by app_id across worker nodes</span>
+<span class="kw">SELECT</span> <span class="fn">create_distributed_table</span>(<span class="str">'gold.app_metrics'</span>, <span class="str">'app_id'</span>);</pre>
+    </div>
+
+    <div class="sec-h">🎓 Skills You Need</div>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(51,103,145,0.12);">🐘</div>
+          <div><div class="skill-name">PostgreSQL Administration</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">Creating databases, users, schemas, setting permissions (GRANT statements), running VACUUM ANALYZE for maintenance, reading pg_stat_activity to monitor query performance. Mostly command-line psql usage.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(51,103,145,0.12);">⏱️</div>
+          <div><div class="skill-name">TimescaleDB Basics</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">The TimescaleDB-specific commands (create_hypertable, add_compression_policy, add_retention_policy) are copy-paste-level. You mainly need to understand WHY you use hypertables and how to verify they're working correctly.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(51,103,145,0.12);">⚙️</div>
+          <div><div class="skill-name">Postgres Tuning</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">The document specifies specific settings (shared_buffers = 6GB, work_mem = 32MB). You need to understand what these do — they control how much memory Postgres uses for query execution. Wrong values make queries slow.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(51,103,145,0.12);">💾</div>
+          <div><div class="skill-name">Backup & Recovery</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">The plan uses pg_dump for daily backups to Contabo Object Storage. You need to write and test the backup cron job, and crucially — you need to test restore procedures before you ever need them in an emergency.</div>
+      </div>
+    </div>
+
+    <div class="claude-box">
+      <div class="claude-header"><div class="claude-icon">✦</div><div class="claude-title">How I Can Help You With PostgreSQL</div></div>
+      <div class="claude-items">
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the complete database setup script</strong> — creating schemas, users, permissions, hypertables, compression policies, all in one file you just run</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the pg_dump backup script</strong> with cron schedule and upload to Contabo Object Storage</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write and explain EXPLAIN ANALYZE</strong> for any slow query — I'll diagnose why it's slow and suggest fixes (indexes, etc.)</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the complete postgresql.conf tuning</strong> settings appropriate for a 24GB RAM server</div></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(4)">← Previous</button>
+    <span class="bc">6 / 10</span>
+    <button class="bnav bnav-n" onclick="go(6)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 6 — POWER BI
+══════════════════════════════════════ -->
+<div class="page" id="p6">
+  <div class="hero">
+    <div class="hero-glow" style="background:#f2c811"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:var(--powerbi);border-color:rgba(242,200,17,0.3);background:rgba(242,200,17,0.06);">BI Layer</span>
+    </div>
+    <h1>Power BI — The Business Dashboard</h1>
+    <p class="hero-lead">Power BI is the final product — what the CEO and team look at every morning. It connects directly to the Gold schema in PostgreSQL via a database connection, imports the data, and displays it as interactive charts, KPI cards, and filterable reports.</p>
+  </div>
+  <div class="content">
+
+    <div class="analogy" style="border-left-color:#f2c811;">
+      <div class="analogy-icon">📺</div>
+      <div class="analogy-body">
+        <strong>Plain English: What Power BI is</strong>
+        <p>Power BI is like a TV that only shows data. The channel it's tuned to is your PostgreSQL Gold schema. Every morning it updates the broadcast with fresh data. Different departments have their own channel: marketing watches the Campaign ROI channel, the CEO watches the Executive Overview channel, and the product team watches the Retention channel.</p>
+      </div>
+    </div>
+
+    <div class="sec-h">🔌 How Power BI Connects to This Stack</div>
+    <div class="tsteps">
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(242,200,17,0.12);color:#f2c811;">1</div>
+        <div class="tstep-body"><h5>Install the PostgreSQL ODBC Driver</h5><p>On the Windows laptop/workstation running Power BI Desktop, you install the PostgreSQL ODBC driver. This is what lets Power BI "speak" to PostgreSQL over the network.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(242,200,17,0.12);color:#f2c811;">2</div>
+        <div class="tstep-body"><h5>Connect Power BI Desktop to the DB VPS</h5><p>In Power BI Desktop → Get Data → PostgreSQL Database. Enter the DB VPS IP, port 5432, database name <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">analytics_db</code>, and credentials. Select only the <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">gold.*</code> schema tables.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(242,200,17,0.12);color:#f2c811;">3</div>
+        <div class="tstep-body"><h5>Build dashboards in Import Mode</h5><p>Data is imported (cached) into Power BI for fast performance. You build charts, KPI cards, maps, and slicers. Write DAX measures for calculated KPIs like ROAS and CAC that can't be pre-computed in the Gold tables.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(242,200,17,0.12);color:#f2c811;">4</div>
+        <div class="tstep-body"><h5>Publish to Power BI Service</h5><p>Upload the completed report to Power BI Service (the web version). Set up scheduled refresh — daily at 4 AM AEDT (after the nightly pipeline). The team accesses dashboards via browser or mobile app with no software to install.</p></div>
+      </div>
+    </div>
+
+    <div class="sec-h">📊 The 5 Dashboards</div>
+    <table class="tbl">
+      <thead><tr><th>Dashboard</th><th>Audience</th><th>Key Charts</th><th>Refresh</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Executive Overview</strong></td><td>CEO, founders</td><td>Total revenue, DAU, top campaigns, user growth</td><td>Daily 4 AM</td></tr>
+        <tr><td><strong>Campaign ROI</strong></td><td>Marketing team</td><td>ROAS by channel, CAC trends, spend vs revenue</td><td>Every 15 min</td></tr>
+        <tr><td><strong>User Retention & LTV</strong></td><td>Product managers</td><td>D1/D7/D30 cohort curves, LTV by source</td><td>Daily 4 AM</td></tr>
+        <tr><td><strong>Platform Performance</strong></td><td>Engineering</td><td>iOS vs Android, crash rates, version adoption</td><td>Daily 4 AM</td></tr>
+        <tr><td><strong>Real-Time Metrics</strong></td><td>All teams</td><td>Current-hour spend, live conversions, anomalies</td><td>Every 15 min</td></tr>
+      </tbody>
+    </table>
+
+    <div class="sec-h">🎓 Skills You Need</div>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(242,200,17,0.1);">📊</div>
+          <div><div class="skill-name">Power BI Desktop</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">Building reports in Power BI Desktop: importing data, creating relationships, designing visuals (bar, line, matrix, map, KPI), using slicers and cross-filtering. 80% drag-and-drop — no coding required for basic dashboards.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(242,200,17,0.1);">🧮</div>
+          <div><div class="skill-name">DAX Measures</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">DAX is Power BI's formula language. You need it for: ROAS = DIVIDE(revenue, spend), Month-over-Month growth with PREVIOUSMONTH(), and CALCULATE() for context-sensitive filters. Start with basics — the patterns repeat.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(242,200,17,0.1);">🔗</div>
+          <div><div class="skill-name">Data Modelling in Power BI</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Creating relationships between Gold tables (fact tables to dimension tables). Since you designed the star schema in dbt, this is mostly a drag-and-drop exercise in Power BI's Model View — connecting foreign key columns.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(242,200,17,0.1);">☁️</div>
+          <div><div class="skill-name">Power BI Service (Publishing)</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Publishing reports to the web portal, setting up scheduled refresh, sharing with the team, setting up row-level security (so each team only sees their data). The web portal is beginner-friendly.</div>
+      </div>
+    </div>
+
+    <div class="claude-box">
+      <div class="claude-header"><div class="claude-icon">✦</div><div class="claude-title">How I Can Help You With Power BI</div></div>
+      <div class="claude-items">
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write all DAX measures</strong> for this client — ROAS, CPI, LTV, D1/D7/D30 retention, MoM growth, all ready to paste into Power BI</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Design the data model</strong> — exact relationships to create between each Gold table for optimal Power BI performance</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Explain any DAX formula</strong> — if a measure isn't calculating correctly, paste it and I'll debug it</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the Power BI REST API call</strong> in Python that Dagster uses to trigger the scheduled dataset refresh</div></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(5)">← Previous</button>
+    <span class="bc">7 / 10</span>
+    <button class="bnav bnav-n" onclick="go(7)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 7 — OLLAMA
+══════════════════════════════════════ -->
+<div class="page" id="p7">
+  <div class="hero">
+    <div class="hero-glow" style="background:#1aac74"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:var(--ollama);border-color:rgba(26,172,116,0.3);background:rgba(26,172,116,0.08);">AI Layer</span>
+    </div>
+    <h1>Ollama — The Local AI Brain</h1>
+    <p class="hero-lead">Ollama runs an AI language model (like a local version of ChatGPT) directly on the App VPS server. After the nightly pipeline finishes, it reads the Gold tables and automatically writes a plain-English summary — like "Meta eCPM up 12%, AppLovin best performer this week" — and posts it to Slack.</p>
+  </div>
+  <div class="content">
+
+    <div class="analogy" style="border-left-color:#1aac74;">
+      <div class="analogy-icon">🤖</div>
+      <div class="analogy-body">
+        <strong>Plain English: What Ollama does</strong>
+        <p>Ollama is like having a data analyst who works the night shift. They wait until all the data is processed (after 3 AM), then they read all the metrics, spot the interesting changes, write a clear summary in plain English, and drop it in the team's Slack channel before everyone wakes up. The difference is: this analyst never sleeps, never gets tired, and works for free.</p>
+      </div>
+    </div>
+
+    <div class="sec-h">⚙️ How Ollama Works in This Stack</div>
+    <div class="tsteps">
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(26,172,116,0.12);color:#1aac74;">1</div>
+        <div class="tstep-body"><h5>Local LLM — No API key needed, no data leaves the server</h5><p>Ollama runs the <strong>Llama 3.2 7B model</strong> locally on the App VPS. This is a 4GB AI model that runs entirely on the server hardware. Unlike OpenAI's API, no data is sent to external servers — important for business data privacy.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(26,172,116,0.12);color:#1aac74;">2</div>
+        <div class="tstep-body"><h5>Python queries the Gold tables after pipeline runs</h5><p>Dagster triggers a Python script after the Gold layer is complete. The script queries <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">gold.app_metrics</code> and <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">gold.campaign_roi</code> for yesterday's data, formats it as context, and sends it to Ollama.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(26,172,116,0.12);color:#1aac74;">3</div>
+        <div class="tstep-body"><h5>LLM generates natural language insights</h5><p>The Python prompt says: "Here is yesterday's app performance data: [data]. Write a 3-paragraph business summary highlighting the most important changes, anomalies, and action items." The LLM responds with readable text.</p></div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(26,172,116,0.12);color:#1aac74;">4</div>
+        <div class="tstep-body"><h5>Summary posted to Slack</h5><p>The Python script sends the generated text to a Slack webhook URL, posting to a <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">#data-insights</code> channel. By 3:20 AM, the Slack message is waiting for the team's morning check.</p></div>
+      </div>
+    </div>
+
+    <div class="sec-h">🎓 Skills You Need</div>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(26,172,116,0.12);">🐍</div>
+          <div><div class="skill-name">Python + LlamaIndex</div><span class="skill-level lvl-1">Intermediate</span></div>
+        </div>
+        <div class="skill-desc">You write Python scripts using the LlamaIndex library to connect Ollama to PostgreSQL. LlamaIndex handles the "query the database, pass data to the LLM, get response back" workflow. The patterns are well-documented and template-able.</div>
+      </div>
+      <div class="skill-card">
+        <div class="skill-top">
+          <div class="skill-icon" style="background:rgba(26,172,116,0.12);">💬</div>
+          <div><div class="skill-name">Prompt Engineering</div><span class="skill-level lvl-0">Beginner</span></div>
+        </div>
+        <div class="skill-desc">Writing clear instructions for the AI: "Summarise this data in 3 bullet points", "Flag any metric that changed by more than 20% vs last week". The quality of the AI's output depends entirely on how well you write the prompt.</div>
+      </div>
+    </div>
+
+    <div class="claude-box">
+      <div class="claude-header"><div class="claude-icon">✦</div><div class="claude-title">How I Can Help You With Ollama</div></div>
+      <div class="claude-items">
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the complete Python script</strong> that queries Gold tables, builds the prompt, calls Ollama, and posts to Slack</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Design and optimise the prompts</strong> for the best quality daily summaries and anomaly detection</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Write the Slack webhook integration</strong> for formatted, readable Slack messages with proper markdown</div></div>
+        <div class="claude-item"><div class="claude-check">✓</div><div class="claude-item-text"><strong>Help you test and tune</strong> the Ollama model outputs until the summaries are genuinely useful</div></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(6)">← Previous</button>
+    <span class="bc">8 / 10</span>
+    <button class="bnav bnav-n" onclick="go(8)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 8 — DAILY FLOW
+══════════════════════════════════════ -->
+<div class="page" id="p8">
+  <div class="hero">
+    <div class="hero-glow" style="background:#94a3b8"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:#94a3b8;border-color:rgba(148,163,184,0.3);background:rgba(148,163,184,0.06);">Operations</span>
+    </div>
+    <h1>The Daily Pipeline — What Runs & When</h1>
+    <p class="hero-lead">Once built, the entire pipeline runs automatically every night without you touching anything. Here's exactly what happens from 2:00 AM to 3:20 AM every single day in Melbourne time.</p>
+  </div>
+  <div class="content">
+
+    <div class="sec-h">🌙 Nightly Batch Pipeline (2:00 AM – 3:20 AM AEDT)</div>
+
+    <div class="timeline">
+      <div class="tl-item"><div class="tl-left"><div class="tl-time">2:00</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#7b61ff;border-color:#7b61ff;"></div><div class="tl-body"><h5>Airbyte — GA4 + Firebase Sync</h5><p>Dagster fires the trigger. Airbyte pulls yesterday's GA4 events (~500MB) and Firebase app events (~300MB) from Google's APIs. Data lands in <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">raw_ga4_stg</code> and <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">raw_firebase_stg</code>.</p></div></div>
+      <div class="tl-item"><div class="tl-left"><div class="tl-time">2:10</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#7b61ff;border-color:#7b61ff;"></div><div class="tl-body"><h5>Airbyte — AdMob + Meta + TikTok + AppLovin + Unity Sync</h5><p>All 5 ad platforms synced in parallel (~200MB total). Ad revenue, spend, impressions all land in their respective staging tables.</p></div></div>
+      <div class="tl-item"><div class="tl-left"><div class="tl-time">2:30</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#4f9cf9;border-color:#4f9cf9;"></div><div class="tl-body"><h5>Dagster — Validation Checks</h5><p>Dagster verifies all Airbyte syncs completed successfully. Checks row counts, confirms schemas are correct. If anything failed, Slack alert fires immediately and downstream steps are skipped.</p></div></div>
+      <div class="tl-item"><div class="tl-left"><div class="tl-time">2:35</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#ff6a2f;border-color:#ff6a2f;"></div><div class="tl-body"><h5>dbt — Silver Layer (~15 min)</h5><p>Dagster triggers <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">dbt run --select silver.*</code>. dbt parses JSON from GA4, cleans nulls, deduplicates events, standardises timestamps to UTC, joins events with revenue. Creates clean Silver tables.</p></div></div>
+      <div class="tl-item"><div class="tl-left"><div class="tl-time">2:50</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#ff6a2f;border-color:#ff6a2f;"></div><div class="tl-body"><h5>dbt — Gold Layer (~10 min)</h5><p>Dagster triggers <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">dbt run --select gold.*</code>. Daily KPIs aggregated, LTV cohorts calculated, campaign ROI computed, retention funnels updated. Gold tables are now ready for Power BI.</p></div></div>
+      <div class="tl-item"><div class="tl-left"><div class="tl-time">3:00</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#336791;border-color:#336791;"></div><div class="tl-body"><h5>Postgres — Maintenance</h5><p>TimescaleDB compresses data older than 7 days. VACUUM ANALYZE runs on modified tables to reclaim disk space and update query planner statistics. This keeps queries fast as data grows.</p></div></div>
+      <div class="tl-item"><div class="tl-left"><div class="tl-time">3:05</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#f2c811;border-color:#f2c811;"></div><div class="tl-body"><h5>Power BI — Dataset Refresh (~10 min)</h5><p>Dagster calls the Power BI REST API to trigger a dataset refresh. Power BI imports fresh Gold data. All 5 dashboards updated. By 3:15 AM, dashboards show last night's data.</p></div></div>
+      <div class="tl-item"><div class="tl-left"><div class="tl-time">3:15</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#1aac74;border-color:#1aac74;"></div><div class="tl-body"><h5>Ollama — AI Daily Summary</h5><p>Python script queries <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">gold.app_metrics</code> and <code style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#89ddff;">gold.campaign_roi</code>. Sends data to Ollama. LLM generates plain-English summary. Posted to #data-insights Slack channel.</p></div></div>
+      <div class="tl-item tl-last"><div class="tl-left"><div class="tl-time">3:20</div><div class="tl-line"></div></div><div class="tl-dot" style="background:#4ade80;border-color:#4ade80;"></div><div class="tl-body"><h5>✅ Pipeline Complete</h5><p>Dagster marks all assets as "materialised". Email report sent: total data processed, run duration, error count. Team wakes up at 9 AM to fresh dashboards and an AI summary in Slack.</p></div></div>
+    </div>
+
+    <div class="sec-h">⚡ Live 15-Minute Pipeline (24/7)</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:14px;">Running in parallel with (and independent from) the nightly batch, a separate Dagster job fires every 15 minutes around the clock. This keeps the Campaign ROI and Real-Time dashboards updated continuously during business hours:</p>
+    <div class="callout cs">
+      <strong>Every 15 minutes: Meta API + GA4 Real-Time API → Python aggregation → Postgres rt_metrics → Power BI auto-refresh</strong>
+      <p>This pipeline runs for approximately 2 minutes. It pulls the last 2 hours of campaign data, computes current-hour ROAS and CAC, and upserts the results into the <code style="font-size:11px;font-family:'JetBrains Mono',monospace;">gold.rt_metrics</code> table. Power BI's Campaign ROI dashboard queries this table directly.</p>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(7)">← Previous</button>
+    <span class="bc">9 / 10</span>
+    <button class="bnav bnav-n" onclick="go(9)">Next →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 9 — YOUR ROLE
+══════════════════════════════════════ -->
+<div class="page" id="p9">
+  <div class="hero">
+    <div class="hero-glow" style="background:#7b61ff"></div>
+    <div class="hero-top">
+      <span class="hero-badge" style="color:#a78bfa;border-color:rgba(167,139,250,0.3);background:rgba(167,139,250,0.08);">Your Roadmap</span>
+    </div>
+    <h1>Your Role, Build Order & How I Help</h1>
+    <p class="hero-lead">This is a big project. Here's a realistic build order, what skills you need at each phase, and specifically how to use me (Claude) at every step to move faster and avoid common mistakes.</p>
+  </div>
+  <div class="content">
+
+    <div class="sec-h">🗺️ Recommended Build Order</div>
+
+    <div class="tsteps">
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(232,64,64,0.15);color:#e84040;">W1</div>
+        <div class="tstep-body">
+          <h5>Week 1 — Infrastructure Setup</h5>
+          <p>Order Contabo VPS servers. Configure Ubuntu, SSH keys, UFW firewall, install Docker on App VPS. Install PostgreSQL + TimescaleDB + Citus on DB VPS. Test connectivity between the two servers.</p>
+          <div style="margin-top:8px;">
+            <span class="tag" style="color:#e84040;border-color:rgba(232,64,64,0.3);">Linux CLI</span>
+            <span class="tag" style="color:#e84040;border-color:rgba(232,64,64,0.3);">Docker</span>
+            <span class="tag" style="color:#e84040;border-color:rgba(232,64,64,0.3);">PostgreSQL install</span>
+          </div>
+        </div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(123,97,255,0.15);color:#7b61ff;">W2</div>
+        <div class="tstep-body">
+          <h5>Week 2 — Airbyte + First Connector</h5>
+          <p>Deploy the Docker Compose stack (Airbyte, Dagster, dbt-ui, Ollama). Get API credentials for GA4 first. Configure GA4 connector in Airbyte. Verify data lands in raw_ga4_stg. Then add remaining connectors one by one.</p>
+          <div style="margin-top:8px;">
+            <span class="tag" style="color:#7b61ff;border-color:rgba(123,97,255,0.3);">Docker Compose</span>
+            <span class="tag" style="color:#7b61ff;border-color:rgba(123,97,255,0.3);">Airbyte UI</span>
+            <span class="tag" style="color:#7b61ff;border-color:rgba(123,97,255,0.3);">API credentials</span>
+          </div>
+        </div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(255,106,47,0.15);color:#ff6a2f;">W3</div>
+        <div class="tstep-body">
+          <h5>Week 3 — dbt Silver Layer</h5>
+          <p>Initialise the dbt project. Write Silver staging models for GA4 and AdMob first (most complex JSON parsing). Run dbt debug to verify connection. Test each model. Gradually add the remaining Silver models.</p>
+          <div style="margin-top:8px;">
+            <span class="tag" style="color:#ff6a2f;border-color:rgba(255,106,47,0.3);">SQL (JOINs, CAST)</span>
+            <span class="tag" style="color:#ff6a2f;border-color:rgba(255,106,47,0.3);">dbt models</span>
+            <span class="tag" style="color:#ff6a2f;border-color:rgba(255,106,47,0.3);">JSON parsing in SQL</span>
+          </div>
+        </div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(255,106,47,0.15);color:#ff6a2f;">W4</div>
+        <div class="tstep-body">
+          <h5>Week 4 — dbt Gold Layer + Tests</h5>
+          <p>Build all Gold aggregation models. Start with app_metrics (simplest). Then campaign_roi (needs JOIN). Then ltv_cohorts and retention_funnels (need window functions — the hardest SQL). Write schema.yml tests for all tables.</p>
+          <div style="margin-top:8px;">
+            <span class="tag" style="color:#ff6a2f;border-color:rgba(255,106,47,0.3);">SQL window functions</span>
+            <span class="tag" style="color:#ff6a2f;border-color:rgba(255,106,47,0.3);">dbt tests (YAML)</span>
+            <span class="tag" style="color:#ff6a2f;border-color:rgba(255,106,47,0.3);">Dimensional modelling</span>
+          </div>
+        </div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(79,156,249,0.15);color:#4f9cf9;">W5</div>
+        <div class="tstep-body">
+          <h5>Week 5 — Dagster Orchestration</h5>
+          <p>Write definitions.py wiring Airbyte + dbt as assets. Add the nightly schedule. Test a full end-to-end run manually first. Then enable the nightly schedule and let it run automatically. Add Slack failure alerts.</p>
+          <div style="margin-top:8px;">
+            <span class="tag" style="color:#4f9cf9;border-color:rgba(79,156,249,0.3);">Python (intermediate)</span>
+            <span class="tag" style="color:#4f9cf9;border-color:rgba(79,156,249,0.3);">Dagster assets & schedules</span>
+            <span class="tag" style="color:#4f9cf9;border-color:rgba(79,156,249,0.3);">Cron syntax</span>
+          </div>
+        </div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(242,200,17,0.12);color:#f2c811;">W6</div>
+        <div class="tstep-body">
+          <h5>Week 6 — Power BI Dashboards</h5>
+          <p>Connect Power BI Desktop to the Gold schema. Build the Executive Overview dashboard first (simplest). Then Campaign ROI. Then the others. Write DAX measures. Publish to Power BI Service. Set up 4 AM scheduled refresh.</p>
+          <div style="margin-top:8px;">
+            <span class="tag" style="color:#f2c811;border-color:rgba(242,200,17,0.3);">Power BI Desktop</span>
+            <span class="tag" style="color:#f2c811;border-color:rgba(242,200,17,0.3);">DAX measures</span>
+            <span class="tag" style="color:#f2c811;border-color:rgba(242,200,17,0.3);">Report publishing</span>
+          </div>
+        </div>
+      </div>
+      <div class="tstep">
+        <div class="tstep-num" style="background:rgba(26,172,116,0.12);color:#1aac74;">W7</div>
+        <div class="tstep-body">
+          <h5>Week 7 — Ollama + Live Pipeline + Handover</h5>
+          <p>Write the Ollama daily insights script. Build the 15-minute live campaign pipeline. Set up pg_dump backups. Document everything. Run the full system for a full week before handover. Train the team on the dashboards.</p>
+          <div style="margin-top:8px;">
+            <span class="tag" style="color:#1aac74;border-color:rgba(26,172,116,0.3);">Python + LlamaIndex</span>
+            <span class="tag" style="color:#1aac74;border-color:rgba(26,172,116,0.3);">Prompt engineering</span>
+            <span class="tag" style="color:#1aac74;border-color:rgba(26,172,116,0.3);">Documentation</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-h">✦ Complete Summary: Where Claude Can Help You</div>
+    <table class="tbl">
+      <thead><tr><th>Step</th><th>What You Do</th><th>Claude Can...</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Server setup</strong></td><td>SSH into servers, run bash commands</td><td>Write every bash command, explain each one, debug errors you paste</td></tr>
+        <tr><td><strong>Docker Compose</strong></td><td>Create and run the compose file</td><td>Write the complete docker-compose.yml with all services</td></tr>
+        <tr><td><strong>Airbyte</strong></td><td>Configure connectors in UI, get API credentials</td><td>Walk you through each connector setup, write custom Python connectors</td></tr>
+        <tr><td><strong>dbt Silver</strong></td><td>Write SQL cleaning models</td><td>Write all Silver SQL models including GA4 JSON parsing</td></tr>
+        <tr><td><strong>dbt Gold</strong></td><td>Write KPI aggregation SQL</td><td>Write all Gold models including complex window function queries</td></tr>
+        <tr><td><strong>dbt Tests</strong></td><td>Write schema.yml assertions</td><td>Write the complete schema.yml test file for all tables</td></tr>
+        <tr><td><strong>Dagster</strong></td><td>Write definitions.py, schedules, alerts</td><td>Write the complete Dagster config including Slack alerts</td></tr>
+        <tr><td><strong>Power BI</strong></td><td>Build visuals, write DAX</td><td>Write all DAX measures, design the data model, debug measure errors</td></tr>
+        <tr><td><strong>Ollama</strong></td><td>Write Python integration script</td><td>Write the complete Ollama + LlamaIndex + Slack script</td></tr>
+        <tr><td><strong>Backups</strong></td><td>Set up cron backup job</td><td>Write the pg_dump backup script with Contabo Object Storage upload</td></tr>
+        <tr><td><strong>Debugging</strong></td><td>Paste error messages</td><td>Diagnose any error from any tool in the stack</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout cs">
+      <strong>🎯 The most important habit to develop</strong>
+      <p>Whenever you hit an error, a concept you don't understand, or a piece of code you need to write — bring it to me first before spending hours searching Stack Overflow. Describe exactly what you're trying to do, paste any error messages, and share the relevant code. I'll get you unstuck in minutes rather than hours.</p>
+    </div>
+
+  </div>
+  <div class="bottom-nav">
+    <button class="bnav bnav-p" onclick="go(8)">← Previous</button>
+    <span class="bc">10 / 10</span>
+    <button class="bnav bnav-n" onclick="go(0)" style="background:var(--ollama);border-color:var(--ollama);">↺ Back to Start</button>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+let cur = 0;
+const total = 10;
+
+function go(n) {
+  if (n < 0 || n >= total) return;
+  document.getElementById(`p${cur}`).classList.remove('active');
+  document.getElementById(`si${cur}`).classList.remove('active');
+  cur = n;
+  document.getElementById(`p${cur}`).classList.add('active');
+  document.getElementById(`si${cur}`).classList.add('active');
+  document.getElementById('prog-fill').style.width = ((cur+1)/total*100)+'%';
+  document.getElementById('main').scrollTop = 0;
+  document.getElementById(`si${cur}`).scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
+// Scroll-based progress on main content
+document.getElementById('main').addEventListener('scroll', function() {
+  const el = this;
+  const pct = el.scrollTop / (el.scrollHeight - el.clientHeight);
+  const base = cur / total;
+  document.getElementById('prog-fill').style.width =
+    ((base + pct/total) * 100) + '%';
+});
+</script>
+</body>
+</html>

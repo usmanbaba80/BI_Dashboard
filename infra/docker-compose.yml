@@ -1,0 +1,200 @@
+# SMB analytics stack (aligned with Solution_Stack_Guide.html)
+# - Dagster UI: http://<app-host>:3000
+# - dbt Workbench UI: http://<app-host>:3001
+# - dbt Workbench API: http://<app-host>:8001
+# - Airbyte: install with abctl on the same VPS (recommended) — port 8000
+#
+# Start: copy .env.example to .env, edit, then from this directory:
+#   docker compose up -d --build
+#
+# External PostgreSQL: set WAREHOUSE_PG_* in .env. The app host must reach the
+# DB over your private network (VPC peering, WireGuard, tailnet, etc.).
+#
+# Airbyte (port 8000 per guide): upstream recommends abctl instead of raw compose.
+# On the App VPS (Docker + enough RAM), install then expose on your LAN IP:
+#   curl -LsfS https://get.airbyte.com | bash -
+#   abctl local install --host <APP_VPS_PRIVATE_OR_PUBLIC_IP> --port 8000 --insecure-cookies
+# Configure Postgres destination with the same WAREHOUSE_PG_* host (private IP of DB VPS).
+# Airbyte bootstrap scripts are in ./airbyte (install_abctl.sh, README.md).
+# Contabo S3: use S3_* vars for aws-cli / rclone backups — see scripts/backup_pg_to_contabo.sh
+
+name: smb-analytics
+
+services:
+  dagster_postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+    volumes:
+      - dagster_pg_data:/var/lib/postgresql/data
+    networks:
+      - analytics
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DAGSTER_POSTGRES_USER} -d ${DAGSTER_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  user_code:
+    build:
+      context: ./dagster
+      dockerfile: Dockerfile_user_code
+    image: smb_analytics_user_code:latest
+    restart: always
+    environment:
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      DAGSTER_CURRENT_IMAGE: smb_analytics_user_code:latest
+      WAREHOUSE_PG_HOST: ${WAREHOUSE_PG_HOST}
+      WAREHOUSE_PG_PORT: ${WAREHOUSE_PG_PORT}
+      WAREHOUSE_PG_USER: ${WAREHOUSE_PG_USER}
+      WAREHOUSE_PG_PASSWORD: ${WAREHOUSE_PG_PASSWORD}
+      WAREHOUSE_PG_DATABASE: ${WAREHOUSE_PG_DATABASE}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+    networks:
+      - analytics
+    depends_on:
+      dagster_postgres:
+        condition: service_healthy
+
+  dagster_webserver:
+    build:
+      context: ./dagster
+      dockerfile: Dockerfile_dagster
+    entrypoint:
+      - dagster-webserver
+      - -h
+      - "0.0.0.0"
+      - -p
+      - "3000"
+      - -w
+      - workspace.yaml
+    ports:
+      - "3000:3000"
+    environment:
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      WAREHOUSE_PG_HOST: ${WAREHOUSE_PG_HOST}
+      WAREHOUSE_PG_PORT: ${WAREHOUSE_PG_PORT}
+      WAREHOUSE_PG_USER: ${WAREHOUSE_PG_USER}
+      WAREHOUSE_PG_PASSWORD: ${WAREHOUSE_PG_PASSWORD}
+      WAREHOUSE_PG_DATABASE: ${WAREHOUSE_PG_DATABASE}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - analytics
+    depends_on:
+      dagster_postgres:
+        condition: service_healthy
+      user_code:
+        condition: service_healthy
+
+  dagster_daemon:
+    build:
+      context: ./dagster
+      dockerfile: Dockerfile_dagster
+    entrypoint:
+      - dagster-daemon
+      - run
+    restart: on-failure
+    environment:
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      WAREHOUSE_PG_HOST: ${WAREHOUSE_PG_HOST}
+      WAREHOUSE_PG_PORT: ${WAREHOUSE_PG_PORT}
+      WAREHOUSE_PG_USER: ${WAREHOUSE_PG_USER}
+      WAREHOUSE_PG_PASSWORD: ${WAREHOUSE_PG_PASSWORD}
+      WAREHOUSE_PG_DATABASE: ${WAREHOUSE_PG_DATABASE}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - analytics
+    depends_on:
+      dagster_postgres:
+        condition: service_healthy
+      user_code:
+        condition: service_healthy
+
+  dbt_workbench_postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DBTWB_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${DBTWB_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${DBTWB_POSTGRES_DB}
+    volumes:
+      - dbtwb_pg_data:/var/lib/postgresql/data
+    networks:
+      - analytics
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DBTWB_POSTGRES_USER} -d ${DBTWB_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dbt_workbench_backend:
+    build:
+      context: ./vendor/dbt-Workbench/backend
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      BACKEND_PORT: 8000
+      POSTGRES_HOST: dbt_workbench_postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${DBTWB_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${DBTWB_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${DBTWB_POSTGRES_DB}
+      DBT_PROJECT_PATH: ${DBTWB_DBT_PROJECT_PATH}
+      DBT_ARTIFACTS_PATH: ${DBTWB_DBT_ARTIFACTS_PATH}
+      GIT_REPOS_BASE_PATH: ${DBTWB_GIT_REPOS_BASE_PATH}
+      AUTH_ENABLED: ${DBTWB_AUTH_ENABLED:-false}
+      SINGLE_PROJECT_MODE: ${DBTWB_SINGLE_PROJECT_MODE:-true}
+      JWT_SECRET_KEY: ${DBTWB_JWT_SECRET_KEY:-change_me}
+      # Provide warehouse coordinates to run dbt profiles in mounted project
+      WAREHOUSE_PG_HOST: ${WAREHOUSE_PG_HOST}
+      WAREHOUSE_PG_PORT: ${WAREHOUSE_PG_PORT}
+      WAREHOUSE_PG_USER: ${WAREHOUSE_PG_USER}
+      WAREHOUSE_PG_PASSWORD: ${WAREHOUSE_PG_PASSWORD}
+      WAREHOUSE_PG_DATABASE: ${WAREHOUSE_PG_DATABASE}
+    volumes:
+      - ./dbt:${DBTWB_DBT_PROJECT_PATH}
+      - ./dbt/artifacts:${DBTWB_DBT_ARTIFACTS_PATH}
+      - ./dbt/workbench-repos:${DBTWB_GIT_REPOS_BASE_PATH}
+    networks:
+      - analytics
+    depends_on:
+      dbt_workbench_postgres:
+        condition: service_healthy
+
+  dbt_workbench_frontend:
+    build:
+      context: ./vendor/dbt-Workbench/frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      VITE_API_BASE_URL: ${DBTWB_VITE_API_BASE_URL}
+    networks:
+      - analytics
+    depends_on:
+      - dbt_workbench_backend
+
+networks:
+  analytics:
+    driver: bridge
+    name: smb_analytics
+
+volumes:
+  dagster_pg_data:
+  dbtwb_pg_data:
