@@ -1,0 +1,68 @@
+---
+title: AI MCP Connectivity - MCP Servers for dbt AI
+description: Configure MCP (Model Context Protocol) servers for dbt-Workbench AI copilot. Supports remote HTTP, SSE, and local stdio with allowlist security.
+slug: /ai-mcp-connectivity
+keywords: [dbt mcp server, model context protocol, mcp ai, ai connectivity, mcp configuration]
+seo_primary_keyword: "ai mcp connectivity"
+seo_intent: "informational"
+last_reviewed: "2026-02-23"
+---
+
+import {BreadcrumbJsonLd, FaqJsonLd} from '@site/src/components/seo/JsonLd';
+
+export const faqItems = [
+  {
+    question: 'What MCP server modes are supported?',
+    answer: 'dbt-Workbench supports remote HTTP, remote SSE (Server-Sent Events), and local stdio MCP servers.',
+  },
+  {
+    question: 'Are local MCP servers restricted?',
+    answer: 'Yes. Local stdio servers must be allowlisted via AI_MCP_LOCAL_ALLOWLIST_JSON for security.',
+  },
+  {
+    question: 'How are MCP processes managed?',
+    answer: 'Local MCP processes have idle TTL and connection timeouts to prevent resource exhaustion.',
+  },
+];
+
+<BreadcrumbJsonLd
+  items={[
+    {name: 'Docs', url: '/docs/'},
+    {name: 'AI MCP Connectivity'},
+  ]}
+/>
+<FaqJsonLd items={faqItems} />
+
+# AI MCP Connectivity
+
+## Supported MCP Server Modes
+
+- `remote_http`
+- `remote_sse`
+- `local_stdio`
+
+## Local MCP Allowlist
+
+Local stdio servers are restricted to allowlisted templates via:
+
+- `AI_MCP_LOCAL_ALLOWLIST_JSON`
+
+Example:
+
+```json
+{
+  "local-mcp": {
+    "command": ["node", "server.js"],
+    "allowed_args": ["--workspace-mode"]
+  }
+}
+```
+
+Only allowlisted template commands and args are launched.
+
+## Operational Controls
+
+- `AI_MCP_PROCESS_IDLE_TTL_SECONDS`
+- `AI_MCP_CONNECT_TIMEOUT_SECONDS`
+
+These control local process lifecycle and MCP call timeout behavior.

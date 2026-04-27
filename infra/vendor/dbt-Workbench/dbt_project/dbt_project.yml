@@ -1,0 +1,31 @@
+name: 'test_project'
+version: '1.0.0'
+config-version: 2
+
+profile: 'test_project'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  rowlineage_enabled: true
+  rowlineage_export_format: jsonl
+  rowlineage_export_path: target/lineage/lineage.jsonl
+
+models:
+  test_project:
+    raw:
+      +materialized: table
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

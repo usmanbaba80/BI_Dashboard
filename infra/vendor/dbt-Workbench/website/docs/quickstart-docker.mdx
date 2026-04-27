@@ -1,0 +1,94 @@
+---
+title: Quickstart - Run dbt UI with Docker Compose
+description: Get started with dbt-Workbench in minutes using Docker Compose. Set up the open source dbt UI locally with lineage, run orchestration, and catalog features.
+slug: /quickstart-docker
+keywords: [dbt docker, dbt quickstart, dbt ui docker, run dbt locally, dbt local setup, docker compose dbt]
+seo_primary_keyword: "quickstart"
+seo_intent: "informational"
+last_reviewed: "2026-02-23"
+---
+
+import {BreadcrumbJsonLd, HowToJsonLd} from '@site/src/components/seo/JsonLd';
+
+export const steps = [
+  {
+    name: 'Clone the repository',
+    text: 'Clone dbt-Workbench repository to your local machine.',
+  },
+  {
+    name: 'Run Docker Compose',
+    text: 'Execute docker-compose up --build to start all services.',
+  },
+  {
+    name: 'Access the UI',
+    text: 'Open http://localhost:3000 to access the dbt UI.',
+  },
+  {
+    name: 'Mount your artifacts',
+    text: 'Replace sample_artifacts with your dbt target directory.',
+  },
+];
+
+<BreadcrumbJsonLd
+  items={[
+    {name: 'Docs', url: '/docs/'},
+    {name: 'Quickstart with Docker Compose'},
+  ]}
+/>
+<HowToJsonLd
+  name="Quickstart dbt-Workbench with Docker Compose"
+  description="Step-by-step guide to run dbt-Workbench locally using Docker Compose. Set up the open source dbt UI with lineage, run orchestration, and catalog features."
+  steps={steps}
+/>
+
+## Quickstart for the dbt UI
+
+Launch dbt-Workbench locally in minutes with Docker Compose. The stack ships with a demo dbt project and sample artifacts, so you can validate lineage visualization, run orchestration, and the dbt catalog viewer on first boot.
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+
+### Run the stack
+
+```bash
+docker-compose up --build
+# or
+docker compose up --build
+```
+
+The services will be available at:
+
+- **UI:** http://localhost:3000
+- **API:** http://localhost:8000
+- **API Docs:** http://localhost:8000/docs
+
+### Mount dbt artifacts
+
+The backend expects dbt artifacts under `./sample_artifacts`, mapped into the container as `/app/dbt_artifacts`.
+
+```
+./sample_artifacts → /app/dbt_artifacts
+```
+
+Replace `sample_artifacts` with your dbt `target/` directory containing:
+
+- `manifest.json`
+- `run_results.json`
+- `catalog.json`
+
+To enable the dbt docs viewer, include the full `dbt docs generate` output (the `index.html` and accompanying assets) inside the mounted `target/` directory. dbt-Workbench will serve that documentation site directly from the latest artifacts.
+
+### Next steps
+
+- Review the [dbt lineage visualization](/docs/lineage-overview/) experience.
+- Set up [dbt run orchestration](/docs/run-orchestration/) and streaming logs.
+- Configure the [dbt scheduler](/docs/scheduler/) for cron-driven runs.
+- Explore the [dbt SQL workspace](/docs/sql-workspace/) workflow.
+
+## Related pages
+
+- [dbt UI overview](/docs/dbt-ui/)
+- [dbt artifacts viewer](/docs/artifacts/)
+- [dbt docs viewer](/docs/docs-viewer/)

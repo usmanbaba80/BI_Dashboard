@@ -1,0 +1,81 @@
+version: '3.9'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=dbt_workbench
+      - DBT_ARTIFACTS_PATH=/app/data/artifacts
+      - DBT_PROJECT_PATH=/app/data/repos/default
+      - BACKEND_PORT=8000
+      - SQL_WORKSPACE_DEFAULT_CONNECTION_URL=postgresql://user:password@db:5432/dbt_workbench
+      - AI_ENABLED=true
+      - AI_DEFAULT_MODE=direct
+      - AI_DEFAULT_DIRECT_PROVIDER=openai
+      - AI_ALLOW_SESSION_PROVIDER_OVERRIDE=true
+      - AI_MCP_LOCAL_ALLOWLIST_JSON={}
+    volumes:
+      - ./data:/app/data
+      - ./data/artifacts:/app/data/artifacts
+      - ./data/repos:/app/data/repos
+      - ./dbt_project:/app/data/repos/default
+      - ./profiles:/app/data/profiles
+    networks:
+      - dbt_workbench
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - dbt_workbench
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  db:
+    image: postgres:13
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=dbt_workbench
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - dbt_workbench
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d dbt_workbench"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+networks:
+  dbt_workbench:
+    driver: bridge
+
+volumes:
+  postgres_data:

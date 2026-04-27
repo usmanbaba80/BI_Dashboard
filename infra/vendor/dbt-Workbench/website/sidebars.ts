@@ -1,0 +1,107 @@
+import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
+
+const sidebars: SidebarsConfig = {
+  docsSidebar: [
+    {
+      type: 'category',
+      label: 'Getting Started',
+      items: ['quickstart-docker', 'screenshots'],
+    },
+    {
+      type: 'category',
+      label: 'Core Documentation',
+      items: [
+        'dbt-ui',
+        'lineage-overview',
+        'column-lineage',
+        'run-orchestration',
+        'scheduler',
+        'sql-workspace',
+        'ai-overview',
+        'ai-configuration',
+        'ai-mcp-connectivity',
+        'ai-security-rbac',
+        'catalog',
+        'docs-viewer',
+        'artifacts',
+        'environments',
+        'auth-rbac',
+        'air-gapped-on-prem',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'How-to Guides',
+      items: [
+        'guides/view-dbt-lineage-locally',
+        'guides/mount-dbt-artifacts-into-ui',
+        'guides/run-dbt-from-web-ui',
+        'guides/schedule-dbt-runs-with-cron',
+        'guides/debug-failed-dbt-runs',
+        'guides/use-compiled-sql-safely',
+        'guides/manage-multiple-dbt-projects',
+        'guides/enable-jwt-auth',
+        'guides/add-plugin',
+        'guides/run-air-gapped',
+        'guides/migrate-from-dbt-cloud',
+        'guides/dbt-testing-guide',
+        'guides/dbt-performance-optimization',
+        'guides/dbt-security-compliance',
+        'guides/dbt-best-practices',
+        'guides/dbt-cicd-pipeline',
+        'guides/dbt-troubleshooting-guide',
+        'guides/dbt-documentation-guide',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Comparisons',
+      items: [
+        'comparisons/dbt-cloud-vs-dbt-workbench',
+        'comparisons/open-source-dbt-ui-tools',
+        'comparisons/dbt-cloud-vs-air-gapped-dbt',
+        'comparisons/dbt-docs-vs-dbt-workbench',
+        'comparisons/open-source-dbt-orchestration-tools',
+        'comparisons/dbt-workbench-vs-command-line-only',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Use Cases',
+      items: [
+        'use-cases/self-hosted-dbt-for-regulated-teams',
+        'use-cases/dbt-lineage-for-data-governance',
+        'use-cases/dbt-ui-for-analytics-engineering-teams',
+        'use-cases/dbt-ui-for-platform-engineering',
+        'use-cases/reduce-dbt-cloud-costs-with-open-source',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Tutorials',
+      items: [
+        'tutorials/setup-dbt-ui-in-under-30-minutes',
+        'tutorials/dbt-scheduler-production-runbook',
+        'tutorials/dbt-catalog-implementation-checklist',
+        'tutorials/dbt-column-lineage-rollout-guide',
+        'tutorials/migrate-dbt-project-to-self-hosted-ui',
+        'tutorials/troubleshoot-slow-dbt-runs-with-lineage',
+        'tutorials/secure-dbt-ui-with-jwt-rbac',
+        'tutorials/air-gapped-dbt-deployment-checklist',
+        'tutorials/dbt-observability-with-run-history-and-artifacts',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Reference',
+      items: ['analytics-setup', 'architecture', 'plugin-system'],
+    },
+    {
+      type: 'category',
+      label: 'Project',
+      items: ['contributing', 'roadmap', 'changelog', 'seo-growth-ops'],
+    },
+  ],
+};
+
+export default sidebars;

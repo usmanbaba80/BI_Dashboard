@@ -1,0 +1,76 @@
+---
+title: AI Configuration - Set Up AI Copilot for dbt
+description: Configure AI copilot defaults, API secrets, and workspace behavior for dbt-Workbench. Supports OpenAI, Anthropic, and Gemini with encrypted secret storage.
+slug: /ai-configuration
+keywords: [dbt ai configuration, ai copilot setup, openai dbt, anthropic dbt, ai workspace settings]
+seo_primary_keyword: "ai configuration"
+seo_intent: "informational"
+last_reviewed: "2026-02-23"
+---
+
+import {BreadcrumbJsonLd, HowToJsonLd} from '@site/src/components/seo/JsonLd';
+
+export const steps = [
+  {
+    name: 'Enable AI Copilot',
+    text: 'Set AI_ENABLED=true and configure AI_SECRETS_MASTER_KEY for encryption.',
+  },
+  {
+    name: 'Choose Default Mode',
+    text: 'Select direct LLM or MCP mode as the workspace default.',
+  },
+  {
+    name: 'Configure API Keys',
+    text: 'Add OpenAI, Anthropic, or Gemini API keys in Settings → AI Copilot.',
+  },
+  {
+    name: 'Set Data Context',
+    text: 'Enable data context toggles for results and run logs as needed.',
+  },
+];
+
+<BreadcrumbJsonLd
+  items={[
+    {name: 'Docs', url: '/docs/'},
+    {name: 'AI Configuration'},
+  ]}
+/>
+<HowToJsonLd
+  name="Configure AI Copilot for dbt-Workbench"
+  description="Step-by-step guide to configure AI copilot defaults, API secrets, and workspace behavior."
+  steps={steps}
+/>
+
+# AI Configuration
+
+## Workspace Settings
+
+Configure from **Settings → AI Copilot**:
+
+- `default_mode`: `direct` or `mcp`
+- `default_direct_provider`: `openai`, `anthropic`, or `gemini`
+- `allow_session_provider_override`
+- data-context toggles for results and run logs
+
+## Secrets
+
+API keys are stored per workspace and encrypted at rest.
+
+- `openai_api_key`
+- `anthropic_api_key`
+- `gemini_api_key`
+
+Environment fallback is supported if workspace secret is not set.
+
+## Environment Variables
+
+Important backend env vars:
+
+- `AI_ENABLED`
+- `AI_SECRETS_MASTER_KEY`
+- `AI_DEFAULT_MODE`
+- `AI_DEFAULT_DIRECT_PROVIDER`
+- `AI_DEFAULT_DIRECT_MODEL_OPENAI`
+- `AI_DEFAULT_DIRECT_MODEL_ANTHROPIC`
+- `AI_DEFAULT_DIRECT_MODEL_GEMINI`
+- `AI_ALLOW_SESSION_PROVIDER_OVERRIDE`

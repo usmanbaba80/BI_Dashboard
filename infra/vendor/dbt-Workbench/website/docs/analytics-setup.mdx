@@ -1,0 +1,45 @@
+---
+title: Analytics setup for dbt-Workbench docs
+description: Optional GA4 setup for the dbt-Workbench documentation site using GA4_ID in GitHub Pages.
+keywords: [dbt analytics, dbt tracking, dbt metrics, dbt monitoring]
+slug: /analytics-setup
+seo_primary_keyword: "analytics setup for dbt-workbench docs"
+seo_intent: "informational"
+last_reviewed: "2026-02-23"
+---
+
+import {BreadcrumbJsonLd} from '@site/src/components/seo/JsonLd';
+
+<BreadcrumbJsonLd items={[{name: 'Docs', url: '/docs/'}, {name: 'Analytics setup'}]} />
+
+# Analytics setup (optional)
+
+dbt-Workbench includes optional Google Analytics 4 tracking. The GA script is only injected when `GA4_ID` is defined at build time.
+
+## Add GA4_ID in GitHub Actions
+
+1. Open your GitHub repository settings.
+2. Navigate to **Secrets and variables → Actions**.
+3. Add a new repository secret named `GA4_ID`.
+4. Set the value to your GA4 Measurement ID (e.g., `G-XXXXXXXXXX`).
+
+## Verify it works
+
+- Trigger a new build by pushing to `main`.
+- Inspect the rendered HTML for the GA script.
+- Confirm real-time events in the GA4 console.
+
+## Optional: Search console verification tags
+
+You can inject verification meta tags at build time with GitHub Actions secrets:
+
+- `GOOGLE_SITE_VERIFICATION` → renders `<meta name="google-site-verification" ...>`
+- `BING_SITE_VERIFICATION` → renders `<meta name="msvalidate.01" ...>`
+
+Add these in **Settings → Secrets and variables → Actions** to enable ownership verification in
+Google Search Console and Bing Webmaster Tools.
+
+## Related pages
+
+- [dbt UI overview](/docs/dbt-ui/)
+- [Quickstart with Docker Compose](/docs/quickstart-docker/)

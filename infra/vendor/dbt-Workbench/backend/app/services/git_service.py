@@ -1,0 +1,906 @@
+from __future__ import annotations
+
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional
+
+import yaml
+from fastapi import HTTPException, status
+from git import Repo
+from git.exc import GitCommandError, InvalidGitRepositoryError
+from gitdb.exc import BadName
+from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
+from app.database.models import models as db_models
+from app.database.services import auth_service
+from app.schemas.git import (
+    AuditRecord,
+    BranchSummary,
+    CreateFileRequest,
+    DeleteFileRequest,
+    FileContent,
+    FileNode,
+    FileChange,
+    GitDiff,
+    GitHistoryEntry,
+    GitRepositorySummary,
+    GitStatusResponse,
+    PullRequest,
+    PushRequest,
+    ValidationResult,
+    WriteFileRequest,
+)
+from app.services import audit_service
+
+
+CRITICAL_FILES = {
+    "dbt_project.yml",
+    "profiles.yml",
+    "packages.yml",
+    "selectors.yml",
+    "manifest.json",
+}
+
+
+def _ensure_git_identity(repo: Repo) -> None:
+    """Ensure commits succeed even in environments without global git config."""
+    writer = repo.config_writer()
+    try:
+        try:
+            writer.get_value("user", "name")
+        except Exception:
+            writer.set_value("user", "name", "dbt-workbench")
+        try:
+            writer.get_value("user", "email")
+        except Exception:
+            writer.set_value("user", "email", "noreply@example.com")
+    finally:
+        writer.release()
+
+
+def _write_default_project_files(base_path: Path) -> None:
+    """Seed a minimal dbt-style project if nothing exists yet."""
+    readme = base_path / "README.md"
+    if not readme.exists():
+        readme.write_text(
+            """# Demo Project\n\nThis starter project is ready for local development.\n""",
+            encoding="utf-8",
+        )
+
+    dbt_project = base_path / "dbt_project.yml"
+    if not dbt_project.exists():
+        dbt_project.write_text(
+            """name: demo_project\nversion: '1.0'\nprofile: user\nmodel-paths: ['models']\n\ntarget-path: "target"\nclean-targets:\n  - "target"\n  - "dbt_packages"\n\nmodels:\n  demo_project:\n    raw:\n      +materialized: table\n    staging:\n      +materialized: view\n    marts:\n      +materialized: table\n""",
+            encoding="utf-8",
+        )
+
+    models_dir = base_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir = models_dir / "raw"
+    staging_dir = models_dir / "staging"
+    marts_dir = models_dir / "marts"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    marts_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_customers = raw_dir / "raw_customers.sql"
+    if not raw_customers.exists():
+        raw_customers.write_text(
+            """{{ config(materialized='table') }}\n\nselect *\nfrom (\n    values\n        (1, 'Alice Johnson', 'alice@example.com'),\n        (2, 'Bob Smith', 'bob@example.com'),\n        (3, 'Carol Diaz', 'carol@example.com')\n) as raw_customers(customer_id, customer_name, customer_email)\n""",
+            encoding="utf-8",
+        )
+
+    raw_orders = raw_dir / "raw_orders.sql"
+    if not raw_orders.exists():
+        raw_orders.write_text(
+            """{{ config(materialized='table') }}\n\nselect *\nfrom (\n    values\n        (1001, 1, date '2026-01-10', 'placed', 120.00),\n        (1002, 2, date '2026-01-11', 'shipped', 89.50),\n        (1003, 1, date '2026-01-12', 'delivered', 42.25),\n        (1004, 3, date '2026-01-12', 'placed', 15.00)\n) as raw_orders(order_id, customer_id, order_date, status, order_amount)\n""",
+            encoding="utf-8",
+        )
+
+    raw_payments = raw_dir / "raw_payments.sql"
+    if not raw_payments.exists():
+        raw_payments.write_text(
+            """{{ config(materialized='table') }}\n\nselect *\nfrom (\n    values\n        (5001, 1001, date '2026-01-11', 'credit_card', 120.00),\n        (5002, 1002, date '2026-01-12', 'bank_transfer', 89.50),\n        (5003, 1003, date '2026-01-13', 'credit_card', 42.25)\n) as raw_payments(payment_id, order_id, payment_date, payment_method, amount)\n""",
+            encoding="utf-8",
+        )
+
+    stg_customers = staging_dir / "stg_customers.sql"
+    if not stg_customers.exists():
+        stg_customers.write_text(
+            "select\n    customer_id,\n    customer_name as name,\n    customer_email as email\nfrom {{ ref('raw_customers') }}\n",
+            encoding="utf-8",
+        )
+
+    stg_orders = staging_dir / "stg_orders.sql"
+    if not stg_orders.exists():
+        stg_orders.write_text(
+            "select\n    order_id,\n    customer_id,\n    order_date,\n    status,\n    order_amount\nfrom {{ ref('raw_orders') }}\n",
+            encoding="utf-8",
+        )
+
+    stg_payments = staging_dir / "stg_payments.sql"
+    if not stg_payments.exists():
+        stg_payments.write_text(
+            "select\n    payment_id,\n    order_id,\n    payment_date,\n    payment_method,\n    amount\nfrom {{ ref('raw_payments') }}\n",
+            encoding="utf-8",
+        )
+
+    customers = marts_dir / "customers.sql"
+    if not customers.exists():
+        customers.write_text(
+            """with customers as (\n    select *\n    from {{ ref('stg_customers') }}\n),\norders as (\n    select *\n    from {{ ref('stg_orders') }}\n),\npayments as (\n    select *\n    from {{ ref('stg_payments') }}\n)\n\nselect\n    customers.customer_id,\n    customers.name,\n    customers.email,\n    count(distinct orders.order_id) as total_orders,\n    coalesce(sum(payments.amount), 0) as total_payments\nfrom customers\nleft join orders\n    on customers.customer_id = orders.customer_id\nleft join payments\n    on orders.order_id = payments.order_id\ngroup by\n    customers.customer_id,\n    customers.name,\n    customers.email\n""",
+            encoding="utf-8",
+        )
+
+    orders = marts_dir / "orders.sql"
+    if not orders.exists():
+        orders.write_text(
+            """with orders as (\n    select *\n    from {{ ref('stg_orders') }}\n),\npayments as (\n    select *\n    from {{ ref('stg_payments') }}\n)\n\nselect\n    orders.order_id,\n    orders.customer_id,\n    orders.order_date,\n    orders.status,\n    orders.order_amount,\n    coalesce(sum(payments.amount), 0) as payments_total,\n    max(payments.payment_date) as last_payment_date\nfrom orders\nleft join payments\n    on orders.order_id = payments.order_id\ngroup by\n    orders.order_id,\n    orders.customer_id,\n    orders.order_date,\n    orders.status,\n    orders.order_amount\n""",
+            encoding="utf-8",
+        )
+
+    schema_file = models_dir / "schema.yml"
+    if not schema_file.exists():
+        schema_file.write_text(
+            """version: 2\n\nmodels:\n  - name: raw_customers\n    description: \"Raw customer records for the demo project.\"\n    columns:\n      - name: customer_id\n        tests:\n          - not_null\n          - unique\n  - name: raw_orders\n    description: \"Raw order records for the demo project.\"\n    columns:\n      - name: order_id\n        tests:\n          - not_null\n          - unique\n  - name: raw_payments\n    description: \"Raw payment records for the demo project.\"\n    columns:\n      - name: payment_id\n        tests:\n          - not_null\n          - unique\n  - name: stg_customers\n    description: \"Staged customer records.\"\n    columns:\n      - name: customer_id\n        tests:\n          - not_null\n          - unique\n  - name: stg_orders\n    description: \"Staged order records.\"\n    columns:\n      - name: order_id\n        tests:\n          - not_null\n          - unique\n  - name: stg_payments\n    description: \"Staged payment records.\"\n    columns:\n      - name: payment_id\n        tests:\n          - not_null\n          - unique\n  - name: customers\n    description: \"Customer dimension with order and payment metrics.\"\n    columns:\n      - name: customer_id\n        tests:\n          - not_null\n          - unique\n  - name: orders\n    description: \"Order fact table with payment rollups.\"\n    columns:\n      - name: order_id\n        tests:\n          - not_null\n          - unique\n""",
+            encoding="utf-8",
+        )
+
+
+def _initialize_local_repo(target_path: Path, branch: str) -> Repo:
+    target_path.mkdir(parents=True, exist_ok=True)
+    try:
+        repo = Repo.init(target_path, initial_branch=branch)
+    except TypeError:  # pragma: no cover - fallback for older GitPython
+        repo = Repo.init(target_path)
+        try:
+            if branch:
+                repo.git.checkout("-b", branch)
+        except Exception:
+            pass
+    _write_default_project_files(target_path)
+    _ensure_git_identity(repo)
+    repo.git.add(A=True)
+    if not repo.head.is_valid():
+        repo.index.commit("Initial local project commit")
+    return repo
+
+
+def _cleanup_invalid_directory(target_path: Path, workspace_key: str) -> None:
+    """Remove directory if it exists but is not a valid git repo.
+
+    This handles the case where a directory exists but is not a git repository,
+    which would cause git clone to fail.
+
+    Args:
+        target_path: Path to the repository directory
+        workspace_key: Workspace key for logging purposes
+    """
+    if target_path.exists():
+        git_dir = target_path / ".git"
+        if not git_dir.exists():
+            # Directory exists but is not a git repo - remove it
+            import shutil
+            print(
+                f"Cleaning up invalid directory for workspace '{workspace_key}': "
+                f"'{target_path}' exists but is not a git repository. "
+                f"Removing to allow fresh clone."
+            )
+            try:
+                shutil.rmtree(target_path)
+                print(f"Successfully removed invalid directory: {target_path}")
+            except Exception as e:
+                print(f"Error removing directory {target_path}: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={
+                        "error": "cleanup_failed",
+                        "message": f"Failed to remove invalid directory: {str(e)}",
+                    },
+                ) from e
+
+
+def _workspace_root(settings, workspace: db_models.Workspace) -> Path:
+    root = Path(settings.git_repos_base_path).joinpath(workspace.key).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+def _validate_target_path(settings, target_path: Path, workspace: db_models.Workspace) -> Path:
+    """Validate and normalize target path for repository.
+
+    Ensures the path is within the appropriate directory structure:
+    - If using default workspace path: under git_repos_base_path
+    - If using custom directory: under data_root for flexibility
+
+    Args:
+        settings: Application settings
+        target_path: Proposed target path
+        workspace: Workspace object
+
+    Returns:
+        Validated and normalized target path
+
+    Raises:
+        HTTPException: If path is invalid or outside allowed directories
+    """
+    repos_base = Path(settings.git_repos_base_path).resolve()
+    data_root = _data_root(settings)
+
+    # Resolve the target path
+    target_path = target_path.resolve()
+
+    # Check if path is within allowed directories
+    try:
+        # Try relative to repos_base first (preferred location)
+        relative_to_repos = target_path.relative_to(repos_base)
+    except ValueError:
+        # Not in repos_base, check if it's at least in data_root
+        try:
+            target_path.relative_to(data_root)
+            # It's in data_root but not in repos_base - this is allowed
+            # (for custom directories like /app/data/<project>)
+        except ValueError:
+            # Not in data_root either - invalid path
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "invalid_path",
+                    "message": (
+                        f"Repository path must be within {repos_base} or {data_root}. "
+                        f"Got: {target_path}"
+                    ),
+                },
+            )
+
+    return target_path
+
+
+def _data_root(settings) -> Path:
+    """Returns the base data directory (parent of repos base path)."""
+    return Path(settings.git_repos_base_path).parent.resolve()
+
+
+def _assert_subpath(root: Path, candidate: Path) -> None:
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "forbidden_path", "message": f"Path must be within {root}."},
+        ) from exc
+
+
+def _safe_path(root: Path, relative: str) -> Path:
+    target = (root / relative).resolve()
+    _assert_subpath(root, target)
+    return target
+
+
+def _resolve_workspace(db: Session, workspace_id: int | None) -> db_models.Workspace:
+    settings = get_settings()
+
+    if workspace_id not in (None, 0):
+        workspace = auth_service.get_workspace(db, workspace_id)
+        if workspace:
+            return workspace
+
+    if settings.single_project_mode or workspace_id in (None, 0):
+        workspace = auth_service.get_workspace_by_key(db, settings.default_workspace_key)
+        if workspace:
+            return workspace
+        return auth_service.create_workspace(
+            db,
+            key=settings.default_workspace_key,
+            name=settings.default_workspace_name,
+            description=settings.default_workspace_description,
+            artifacts_path=settings.dbt_artifacts_path,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={"error": "workspace_not_found", "message": "Workspace not found."},
+    )
+
+
+def _ensure_repo(path: str) -> Repo:
+    path_obj = Path(path)
+    if not path_obj.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "git_not_configured", "message": "Repository connection not configured."},
+        )
+    try:
+        return Repo(path_obj)
+    except InvalidGitRepositoryError as exc:  # pragma: no cover - defensive
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "not_a_repository", "message": f"{path} is not a git repository."},
+        ) from exc
+
+
+def _get_or_create_repo_record(
+    db: Session,
+    workspace_id: int,
+    *,
+    remote_url: Optional[str],
+    branch: str,
+    directory: str,
+    provider: Optional[str],
+) -> db_models.GitRepository:
+    record = (
+        db.query(db_models.GitRepository)
+        .filter(db_models.GitRepository.workspace_id == workspace_id)
+        .first()
+    )
+    if record:
+        record.remote_url = remote_url
+        record.default_branch = branch
+        record.directory = directory
+        record.provider = provider
+    else:
+        record = db_models.GitRepository(
+            workspace_id=workspace_id,
+            remote_url=remote_url,
+            default_branch=branch,
+            directory=directory,
+            provider=provider,
+        )
+        db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def connect_repository(
+    db: Session,
+    *,
+    workspace_id: int,
+    remote_url: Optional[str],
+    branch: str,
+    directory: Optional[str],
+    provider: Optional[str],
+    user_id: int | None,
+    username: str | None,
+) -> GitRepositorySummary:
+    settings = get_settings()
+    workspace = _resolve_workspace(db, workspace_id)
+    resolved_workspace_id = workspace.id
+
+    if directory:
+        target_path = Path(directory).resolve()
+        # Validate and normalize the path
+        target_path = _validate_target_path(settings, target_path, workspace)
+    else:
+        target_path = _workspace_root(settings, workspace)
+
+    # Clean up invalid directory if it exists but is not a git repo
+    _cleanup_invalid_directory(target_path, workspace.key)
+
+    target_path.mkdir(parents=True, exist_ok=True)
+
+    # Clone remote or initialize a local-only repository
+    repo: Repo
+    if remote_url:
+        if not (target_path / ".git").exists():
+            try:
+                repo = Repo.clone_from(remote_url, target_path, branch=branch)
+            except GitCommandError as e:
+                # Check if the error is about non-empty directory (shouldn't happen due to cleanup)
+                if "already exists and is not an empty directory" in str(e.stderr):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail={
+                            "error": "directory_not_empty",
+                            "message": (
+                                f"Directory '{target_path}' already exists and is not empty. "
+                                "Please disconnect and reconnect the repository to fix this issue."
+                            ),
+                        },
+                    ) from e
+                # Fall back to cloning the default branch when the requested branch is missing
+                try:
+                    repo = Repo.clone_from(remote_url, target_path)
+                    try:
+                        branch = repo.active_branch.name  # Use the branch that was actually checked out
+                    except TypeError:
+                        # Detached HEAD; pick the first local branch if available
+                        branch = repo.heads[0].name if repo.heads else branch
+                except GitCommandError as e2:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail={
+                            "error": "clone_failed",
+                            "message": f"Failed to clone repository from {remote_url}: {str(e2)}",
+                        },
+                    ) from e2
+        else:
+            repo = _ensure_repo(str(target_path))
+    else:
+        if (target_path / ".git").exists():
+            repo = _ensure_repo(str(target_path))
+        else:
+            repo = _initialize_local_repo(target_path, branch)
+
+    _ensure_git_identity(repo)
+
+    # Ensure the desired branch exists locally; otherwise create it from remote or fall back gracefully
+    local_branches = {h.name for h in repo.heads}
+    if branch in local_branches:
+        repo.git.checkout(branch)
+    else:
+        origin = repo.remotes.origin if repo.remotes else None
+        remote_branch_ref = None
+        if origin:
+            origin.fetch()
+            remote_branch_ref = next((ref for ref in origin.refs if ref.name.endswith(f"/{branch}")), None)
+
+        if remote_branch_ref:
+            repo.git.checkout("-b", branch, remote_branch_ref.name)
+        else:
+            # Fallback: stay on current active branch or first available local branch
+            try:
+                branch = repo.active_branch.name
+            except TypeError:
+                branch = repo.heads[0].name if repo.heads else branch
+            if branch:
+                repo.git.checkout(branch)
+
+    record = _get_or_create_repo_record(
+        db,
+        workspace_id=resolved_workspace_id,
+        remote_url=remote_url,
+        branch=branch,
+        directory=str(target_path),
+        provider=provider,
+    )
+    record.last_synced_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(record)
+
+    audit_service.record_audit(
+        db,
+        workspace_id=resolved_workspace_id,
+        user_id=user_id,
+        username=username,
+        action="connect_repository",
+        resource="git",
+        metadata={"remote_url": remote_url, "branch": branch, "local_only": not bool(remote_url)},
+    )
+
+    return GitRepositorySummary.model_validate(record)
+
+
+def _repo_record(db: Session, workspace_id: int) -> db_models.GitRepository:
+    settings = get_settings()
+    record = (
+        db.query(db_models.GitRepository)
+        .filter(db_models.GitRepository.workspace_id == workspace_id)
+        .first()
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "git_not_configured", "message": "Repository connection not configured."},
+        )
+    workspace = _resolve_workspace(db, workspace_id)
+    # Validate it is within the data root, not necessarily the specific workspace root
+    _assert_subpath(_data_root(settings), Path(record.directory).resolve())
+    return record
+
+
+def get_repository(db: Session, workspace_id: int) -> GitRepositorySummary | None:
+    """Get the currently connected repository for a workspace, or None if not configured."""
+    record = (
+        db.query(db_models.GitRepository)
+        .filter(db_models.GitRepository.workspace_id == workspace_id)
+        .first()
+    )
+    if not record:
+        return None
+    return GitRepositorySummary.model_validate(record)
+
+
+def disconnect_repository(
+    db: Session,
+    workspace_id: int,
+    *,
+    delete_files: bool = False,
+    user_id: int | None,
+    username: str | None,
+) -> None:
+    """Disconnect the repository from the workspace. Optionally delete cloned files."""
+    record = (
+        db.query(db_models.GitRepository)
+        .filter(db_models.GitRepository.workspace_id == workspace_id)
+        .first()
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "git_not_configured", "message": "No repository to disconnect."},
+        )
+
+    directory = record.directory
+    db.delete(record)
+    db.commit()
+
+    if delete_files and directory:
+        import shutil
+        dir_path = Path(directory).resolve()
+        # Ensure we only delete within data root
+        _assert_subpath(_data_root(get_settings()), dir_path)
+        if dir_path.exists():
+            shutil.rmtree(dir_path)
+
+    audit_service.record_audit(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        username=username,
+        action="disconnect_repository",
+        resource="git",
+        metadata={"directory": directory, "delete_files": delete_files},
+    )
+
+
+def _categorize(path: Path, base: Path) -> Optional[str]:
+    parts = path.relative_to(base).parts
+    if not parts:
+        return None
+    top = parts[0]
+    mapping = {
+        "models": "models",
+        "macros": "macros",
+        "tests": "tests",
+        "seeds": "seeds",
+        "snapshots": "snapshots",
+    }
+    return mapping.get(top, "configs" if path.suffix in {".yml", ".yaml", ".json"} else None)
+
+
+def _build_tree(base_path: Path) -> List[FileNode]:
+    nodes: List[FileNode] = []
+    for root, dirs, files in os.walk(base_path):
+        dirs[:] = [d for d in dirs if not d.startswith(".git")]
+        rel_root = Path(root).relative_to(base_path)
+        for file in files:
+            full_path = Path(root) / file
+            rel_path = full_path.relative_to(base_path)
+            nodes.append(
+                FileNode(
+                    name=file,
+                    path=str(rel_path),
+                    type="file",
+                    children=None,
+                    category=_categorize(full_path, base_path),
+                )
+            )
+    return nodes
+
+
+def get_status(db: Session, workspace_id: int) -> GitStatusResponse:
+    try:
+        record = _repo_record(db, workspace_id)
+        repo = _ensure_repo(record.directory)
+    except HTTPException as exc:
+        detail = getattr(exc, "detail", {}) or {}
+        if exc.status_code == status.HTTP_404_NOT_FOUND and detail.get("error") == "git_not_configured":
+            # Graceful response when repository is not yet connected
+            return GitStatusResponse(
+                branch="not_configured",
+                is_clean=True,
+                ahead=0,
+                behind=0,
+                changes=[],
+                has_conflicts=False,
+                configured=False,
+            )
+        raise
+    try:
+        branch_name = repo.active_branch.name
+    except Exception:
+        # Detached HEAD or no commits yet; fall back to recorded default branch or placeholder
+        branch_name = record.default_branch or "HEAD"
+
+    ahead = behind = 0
+    if repo.remotes:
+        try:
+            if repo.head.is_valid():
+                ahead_output = repo.git.rev_list(
+                    "--left-right", "--count", f"origin/{branch_name}...{branch_name}"
+                )
+                ahead, behind = [int(val) for val in ahead_output.split()]
+        except Exception:
+            ahead = behind = 0
+
+    changes: List[FileChange] = []
+    for diff in repo.index.diff(None):
+        changes.append(FileChange(path=diff.a_path, change_type="modified", staged=False))
+    try:
+        for diff in repo.index.diff("HEAD"):
+            changes.append(FileChange(path=diff.a_path, change_type="staged", staged=True))
+    except (BadName, ValueError):
+        # No HEAD yet (empty repo); skip staged comparison
+        pass
+    for untracked in repo.untracked_files:
+        changes.append(FileChange(path=untracked, change_type="untracked", staged=False))
+
+    has_conflicts = repo.index.unmerged_blobs() != {}
+
+    return GitStatusResponse(
+        branch=branch_name,
+        is_clean=not repo.is_dirty(untracked_files=True),
+        ahead=ahead,
+        behind=behind,
+        changes=changes,
+        has_conflicts=has_conflicts,
+        configured=True,
+    )
+
+
+def list_branches(db: Session, workspace_id: int) -> List[BranchSummary]:
+    record = _repo_record(db, workspace_id)
+    repo = _ensure_repo(record.directory)
+    try:
+        active = repo.active_branch.name
+    except Exception:
+        active = record.default_branch or "HEAD"
+    branches = [BranchSummary(name=branch.name, is_active=branch.name == active) for branch in repo.branches]
+    if not branches:
+        branches.append(BranchSummary(name=active, is_active=True))
+    return branches
+
+
+def pull(db: Session, workspace_id: int, request: PullRequest, *, user_id: int | None, username: str | None) -> GitStatusResponse:
+    record = _repo_record(db, workspace_id)
+    repo = _ensure_repo(record.directory)
+    if not repo.remotes:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "remote_missing", "message": "No git remote is configured for this project."},
+        )
+    remote = repo.remote(request.remote_name)
+    try:
+        branch_name = request.branch or repo.active_branch.name
+    except Exception:
+        branch_name = request.branch or record.default_branch or "main"
+    try:
+        remote.pull(branch_name)
+    except GitCommandError as exc:  # pragma: no cover - passthrough errors
+        raise HTTPException(status_code=400, detail={"error": "pull_failed", "message": str(exc)})
+    record.last_synced_at = datetime.now(timezone.utc)
+    db.commit()
+
+    audit_service.record_audit(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        username=username,
+        action="pull",
+        resource="git",
+        metadata={"remote": request.remote_name},
+    )
+    return get_status(db, workspace_id)
+
+
+def push(db: Session, workspace_id: int, request: PushRequest, *, user_id: int | None, username: str | None) -> GitStatusResponse:
+    record = _repo_record(db, workspace_id)
+    repo = _ensure_repo(record.directory)
+    if not repo.remotes:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "remote_missing", "message": "No git remote is configured for this project."},
+        )
+    remote = repo.remote(request.remote_name)
+    try:
+        branch = request.branch or repo.active_branch.name
+    except Exception:
+        branch = request.branch or record.default_branch or "main"
+    try:
+        remote.push(branch)
+    except GitCommandError as exc:  # pragma: no cover
+        raise HTTPException(status_code=400, detail={"error": "push_failed", "message": str(exc)})
+
+    audit_service.record_audit(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        username=username,
+        action="push",
+        resource="git",
+        metadata={"remote": request.remote_name, "branch": branch},
+    )
+    return get_status(db, workspace_id)
+
+
+def commit_changes(db: Session, workspace_id: int, message: str, files: Optional[List[str]], *, user_id: int | None, username: str | None) -> str:
+    record = _repo_record(db, workspace_id)
+    repo = _ensure_repo(record.directory)
+    if files:
+        repo.git.add(files)
+    else:
+        repo.git.add(A=True)
+    commit = repo.index.commit(message)
+    audit_service.record_audit(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        username=username,
+        action="commit",
+        resource="git",
+        metadata={"message": message, "files": files or "all"},
+        commit_hash=commit.hexsha,
+    )
+    return commit.hexsha
+
+
+def switch_branch(db: Session, workspace_id: int, branch: str, *, user_id: int | None, username: str | None) -> GitStatusResponse:
+    record = _repo_record(db, workspace_id)
+    repo = _ensure_repo(record.directory)
+    try:
+        repo.git.checkout(branch)
+    except GitCommandError as exc:  # pragma: no cover
+        raise HTTPException(status_code=400, detail={"error": "branch_checkout_failed", "message": str(exc)})
+
+    audit_service.record_audit(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        username=username,
+        action="switch_branch",
+        resource="git",
+        metadata={"branch": branch},
+    )
+    return get_status(db, workspace_id)
+
+
+def list_files(db: Session, workspace_id: int) -> List[FileNode]:
+    record = _repo_record(db, workspace_id)
+    repo_path = Path(record.directory).resolve()
+    return _build_tree(repo_path)
+
+
+def read_file(db: Session, workspace_id: int, path: str) -> FileContent:
+    record = _repo_record(db, workspace_id)
+    repo_path = Path(record.directory).resolve()
+    full_path = _safe_path(repo_path, path)
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail={"error": "file_not_found", "message": path})
+    content = full_path.read_text(encoding="utf-8")
+    readonly = full_path.name == "manifest.json"
+    return FileContent(path=path, content=content, readonly=readonly)
+
+
+def validate_file(path: Path, content: str) -> ValidationResult:
+    errors: List[str] = []
+    if path.suffix in {".yml", ".yaml"}:
+        try:
+            yaml.safe_load(content)
+        except yaml.YAMLError as exc:
+            errors.append(str(exc))
+    if path.name == "manifest.json":
+        errors.append("manifest.json is read-only unless explicitly enabled")
+    return ValidationResult(path=str(path), is_valid=len(errors) == 0, errors=errors)
+
+
+def write_file(
+    db: Session,
+    workspace_id: int,
+    request: WriteFileRequest,
+    *,
+    user_id: int | None,
+    username: str | None,
+) -> ValidationResult:
+    record = _repo_record(db, workspace_id)
+    repo_path = Path(record.directory).resolve()
+    full_path = _safe_path(repo_path, request.path)
+    validation = validate_file(full_path, request.content)
+    if not validation.is_valid:
+        return validation
+
+    if full_path.name in CRITICAL_FILES and not request.message:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "confirmation_required", "message": "Critical files require confirmation."},
+        )
+
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(request.content, encoding="utf-8")
+
+    audit_service.record_audit(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        username=username,
+        action="write_file",
+        resource=request.path,
+        metadata={"environment": request.environment},
+    )
+    return validation
+
+
+def create_file(
+    db: Session,
+    workspace_id: int,
+    request: CreateFileRequest,
+    *,
+    user_id: int | None,
+    username: str | None,
+) -> ValidationResult:
+    return write_file(db, workspace_id, request, user_id=user_id, username=username)
+
+
+def delete_file(
+    db: Session,
+    workspace_id: int,
+    request: DeleteFileRequest,
+    *,
+    user_id: int | None,
+    username: str | None,
+) -> None:
+    record = _repo_record(db, workspace_id)
+    repo_path = Path(record.directory).resolve()
+    full_path = _safe_path(repo_path, request.path)
+    if full_path.name in CRITICAL_FILES:
+        raise HTTPException(status_code=400, detail={"error": "protected_file", "message": "Cannot delete critical file."})
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail={"error": "file_not_found", "message": request.path})
+    full_path.unlink()
+    audit_service.record_audit(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        username=username,
+        action="delete_file",
+        resource=request.path,
+        metadata={"environment": request.environment},
+    )
+
+
+def diff(db: Session, workspace_id: int, path: Optional[str] = None) -> List[GitDiff]:
+    record = _repo_record(db, workspace_id)
+    repo = _ensure_repo(record.directory)
+    args = []
+    if path:
+        args.append(path)
+    diff_text = repo.git.diff(*args)
+    return [GitDiff(path=path or "working_tree", diff=diff_text)]
+
+
+def history(db: Session, workspace_id: int, limit: int = 50) -> List[GitHistoryEntry]:
+    record = _repo_record(db, workspace_id)
+    repo = _ensure_repo(record.directory)
+    entries: List[GitHistoryEntry] = []
+    if not repo.head.is_valid():
+        return entries
+    for commit in repo.iter_commits(max_count=limit):
+        entries.append(
+            GitHistoryEntry(
+                commit_hash=commit.hexsha,
+                author=str(commit.author),
+                message=commit.message.strip(),
+                timestamp=datetime.fromtimestamp(commit.committed_date, tz=timezone.utc),
+            )
+        )
+    return entries
+
+
+def audit(db: Session, workspace_id: int) -> List[AuditRecord]:
+    records = audit_service.list_audit_records(db, workspace_id)
+    return [
+        AuditRecord(
+            id=record.id,
+            workspace_id=record.workspace_id,
+            user_id=record.user_id,
+            username=record.username,
+            action=record.action,
+            resource=record.resource,
+            metadata=record.metadata_,
+            created_at=record.created_at,
+            commit_hash=record.commit_hash,
+            environment=record.environment,
+        )
+        for record in records
+    ]
