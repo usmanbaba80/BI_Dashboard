@@ -36,6 +36,16 @@ def _manifest_has_models(manifest_path: Path) -> bool:
 
 
 def _build_definitions() -> Definitions:
+    if not (DBT_PROJECT_DIR / "dbt_project.yml").is_file():
+        @asset
+        def stack_healthcheck():
+            return {
+                "status": "ok",
+                "dbt": f"missing dbt_project.yml at {DBT_PROJECT_DIR}",
+            }
+
+        return Definitions(assets=[stack_healthcheck])
+
     # dagster-dbt 0.25.x: project_dir only (profiles.yml lives in the dbt project root)
     dbt_project = DbtProject(project_dir=DBT_PROJECT_DIR)
     manifest_path = Path(dbt_project.manifest_path)

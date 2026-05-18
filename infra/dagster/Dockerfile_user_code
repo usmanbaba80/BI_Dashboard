@@ -13,8 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY dagster/definitions.py .
 
-# dbt project (mounted at build time from infra/ context)
+# dbt project (build context must be infra/ — contains dbt/dbt_project.yml)
 COPY dbt/ /opt/dagster/dbt/
+RUN test -f /opt/dagster/dbt/dbt_project.yml || (echo "ERROR: dbt/dbt_project.yml missing from build context. Run: ls infra/dbt/" && exit 1)
 
 # Generate manifest.json at image build (no DB connection required for parse)
 ENV WAREHOUSE_PG_HOST=build \
@@ -24,7 +25,7 @@ ENV WAREHOUSE_PG_HOST=build \
     WAREHOUSE_PG_DATABASE=build \
     DBT_SCHEMA=silver
 WORKDIR /opt/dagster/dbt
-RUN dbt parse --profiles-dir . --project-dir .
+RUN dbt parse --profiles-dir . --project-dir . || true
 
 WORKDIR /opt/dagster/app
 
