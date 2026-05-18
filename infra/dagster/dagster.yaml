@@ -21,6 +21,7 @@ run_launcher:
       - WAREHOUSE_PG_USER
       - WAREHOUSE_PG_PASSWORD
       - WAREHOUSE_PG_DATABASE
+      - DBT_SCHEMA
     network: smb_analytics
 
 run_storage:

@@ -1,41 +1,32 @@
-## Infra Stack (PowerBi project)
+## Infra stack
 
-This folder contains the deployment setup aligned with `Solution_Stack_Guide.html`.
+| Service | Port | Notes |
+|---------|------|--------|
+| Dagster | 3000 | Orchestration |
+| dbt Workbench | 3001 | UI; models saved to `dbt/models/` |
+| dbt API | 8001 | |
+| Airbyte | 8000 | Install with `airbyte/install_abctl.sh` |
 
-### What runs from `docker-compose.yml`
+Warehouse: external Postgres (`WAREHOUSE_PG_*` in `.env`). Schemas: `raw`, `silver`, `gold` — see `sql/001_database_structure.sql`.
 
-- Dagster UI: `http://<host>:3000`
-- dbt-Workbench UI: `http://<host>:3001`
-- dbt-Workbench API: `http://<host>:8001`
-- Dagster metadata Postgres (internal)
-- dbt-Workbench metadata Postgres (internal)
-
-### What runs outside Compose
-
-- Airbyte via `abctl` on App VPS (see `airbyte/README.md`)
-- Expected endpoint: `http://<host>:8000`
-
-### Warehouse pattern
-
-- External Postgres (DB VPS) is the analytics warehouse.
-- Compose services connect over private networking using `WAREHOUSE_PG_*`.
-- Contabo object storage (`S3_*`) is available for backups/artifacts.
-
-### Quick start
+### Start
 
 ```bash
-cd infra
 cp .env.example .env
-# edit .env
-docker compose up -d --build
+docker-compose up -d --build
 ```
 
-### Note on dbt-Workbench image build
+On older hosts use `docker-compose` (hyphen), not `docker compose`.
 
-`docker-compose.yml` is pinned to a local vendored copy:
+### After adding dbt models in Workbench
 
-- path: `infra/vendor/dbt-Workbench`
-- commit: `dac2af58d0f983c29f4971a5423ebe637d9b810b`
+```bash
+docker-compose build --no-cache user_code
+docker-compose up -d user_code dagster_webserver dagster_daemon
+```
 
-This makes builds reproducible and avoids relying on Docker remote Git build contexts.
+Dagster job: `transform_raw_to_silver_gold`
 
+### dbt-Workbench vendor
+
+Built from `vendor/dbt-Workbench` (pinned in repo).

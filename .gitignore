@@ -1,0 +1,17 @@
+.env
+*.env.local
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# dbt
+infra/dbt/target/
+infra/dbt/dbt_packages/
+infra/dbt/artifacts/
+infra/dbt/logs/
+infra/dbt/workbench-repos/
+
+# local compose overrides
+docker-compose.override.yml
+**/docker-compose.yml.bak

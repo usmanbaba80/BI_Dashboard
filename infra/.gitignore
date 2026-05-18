@@ -1,1 +1,6 @@
 .env
+dbt/target/
+dbt/dbt_packages/
+dbt/artifacts/
+dbt/logs/
+dbt/workbench-repos/

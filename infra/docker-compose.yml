@@ -40,8 +40,8 @@ services:
 
   user_code:
     build:
-      context: ./dagster
-      dockerfile: Dockerfile_user_code
+      context: .
+      dockerfile: dagster/Dockerfile_user_code
     image: smb_analytics_user_code:latest
     restart: always
     environment:
@@ -54,6 +54,8 @@ services:
       WAREHOUSE_PG_USER: ${WAREHOUSE_PG_USER}
       WAREHOUSE_PG_PASSWORD: ${WAREHOUSE_PG_PASSWORD}
       WAREHOUSE_PG_DATABASE: ${WAREHOUSE_PG_DATABASE}
+      DBT_SCHEMA: ${DBT_SCHEMA:-silver}
+      DAGSTER_ETL_CRON: ${DAGSTER_ETL_CRON:-0 2 * * *}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
@@ -170,7 +172,8 @@ services:
     volumes:
       - ./dbt:${DBTWB_DBT_PROJECT_PATH}
       - ./dbt/artifacts:${DBTWB_DBT_ARTIFACTS_PATH}
-      - ./dbt/workbench-repos:${DBTWB_GIT_REPOS_BASE_PATH}
+      # Git/file UI writes to repos/<workspace>; mount same dbt project so models land in ./dbt/models
+      - ./dbt:${DBTWB_GIT_REPOS_BASE_PATH}/default
     networks:
       - analytics
     depends_on:

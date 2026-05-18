@@ -1,0 +1,14 @@
+version: 2
+
+# 1) Run Airbyte sync -> tables appear in schema raw
+# 2) List them:  psql ... -c "\dt raw.*"
+# 3) Add each table below, then create silver/gold models in dbt Workbench UI
+#
+sources:
+  - name: raw
+    description: Bronze tables created by Airbyte
+    schema: raw
+    tables: []
+    # Example after first sync:
+    # tables:
+    #   - name: raw_ga4_stg

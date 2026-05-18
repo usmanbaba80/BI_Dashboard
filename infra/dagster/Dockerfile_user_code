@@ -6,11 +6,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /opt/dagster/app/
 WORKDIR /opt/dagster/app
+
+COPY dagster/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY definitions.py /opt/dagster/app/
+COPY dagster/definitions.py .
+
+# dbt project (mounted at build time from infra/ context)
+COPY dbt/ /opt/dagster/dbt/
+
+# Generate manifest.json at image build (no DB connection required for parse)
+ENV WAREHOUSE_PG_HOST=build \
+    WAREHOUSE_PG_PORT=5432 \
+    WAREHOUSE_PG_USER=build \
+    WAREHOUSE_PG_PASSWORD=build \
+    WAREHOUSE_PG_DATABASE=build \
+    DBT_SCHEMA=silver
+WORKDIR /opt/dagster/dbt
+RUN dbt parse --profiles-dir . --project-dir .
+
+WORKDIR /opt/dagster/app
 
 EXPOSE 4000
 
