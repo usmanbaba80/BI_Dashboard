@@ -17,8 +17,11 @@
 # Configure Postgres destination with the same WAREHOUSE_PG_* host (private IP of DB VPS).
 # Airbyte bootstrap scripts are in ./airbyte (install_abctl.sh, README.md).
 # Contabo S3: use S3_* vars for aws-cli / rclone backups — see scripts/backup_pg_to_contabo.sh
+#
+# Older hosts: use `docker-compose` (hyphen). If you see errors about `name:`, this file
+# uses compose file version 2.4 (no top-level project name).
 
-name: smb-analytics
+version: "2.4"
 
 services:
   dagster_postgres:
@@ -196,7 +199,6 @@ services:
 networks:
   analytics:
     driver: bridge
-    name: smb_analytics
 
 volumes:
   dagster_pg_data:

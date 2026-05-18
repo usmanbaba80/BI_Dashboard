@@ -16,7 +16,9 @@ cp .env.example .env
 docker-compose up -d --build
 ```
 
-On older hosts use `docker-compose` (hyphen), not `docker compose`.
+On older hosts use `docker-compose` (hyphen), not `docker compose`. Compose file is v2.4 (compatible with legacy `docker-compose` 1.x).
+
+Dagster job containers use Docker network `infra_analytics` (from project folder name `infra`).
 
 ### After adding dbt models in Workbench
 

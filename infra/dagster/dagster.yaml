@@ -22,7 +22,7 @@ run_launcher:
       - WAREHOUSE_PG_PASSWORD
       - WAREHOUSE_PG_DATABASE
       - DBT_SCHEMA
-    network: smb_analytics
+    network: infra_analytics
 
 run_storage:
   module: dagster_postgres.run_storage
