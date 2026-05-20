@@ -76,6 +76,26 @@ docker-compose up -d
 - Destination: host `10.0.4.2`, schema `raw`, password set
 - Manual sync once before first dbt run
 
+## If `user_code` is unhealthy (dagster_webserver / dagster_daemon won't start)
+
+```bash
+docker-compose logs --tail=80 user_code
+```
+
+Common causes:
+
+1. **Airbyte 401 Unauthorized** — Dagster needs API credentials. On the App VPS run `abctl local credentials` and set `AIRBYTE_USERNAME` / `AIRBYTE_PASSWORD` in `.env`, then `docker-compose up -d --force-recreate user_code`. Or set `AIRBYTE_ENABLED=false` until configured.
+2. **Airbyte unreachable** — ensure abctl is on port 8000 and `AIRBYTE_API_HOST` is correct (`host.docker.internal` or `172.17.0.1`).
+2. **Python error in `definitions.py`** — fix from log, rebuild `user_code`.
+3. **Missing dbt project** — ensure `infra/dbt/dbt_project.yml` exists on the VPS.
+
+```bash
+docker-compose up -d user_code
+docker-compose ps
+# when user_code is healthy:
+docker-compose up -d dagster_webserver dagster_daemon
+```
+
 ## Common misconfigurations (fixed in repo)
 
 | Issue | Fix |

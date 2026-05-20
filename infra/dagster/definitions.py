@@ -8,15 +8,19 @@ Rebuild user_code after changing dbt models: docker-compose build --no-cache use
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
+
+logger = logging.getLogger(__name__)
 
 from dagster import (
     AssetExecutionContext,
     AssetKey,
     AssetSelection,
     Definitions,
+    Failure,
     ScheduleDefinition,
     asset,
     define_asset_job,
@@ -89,7 +93,18 @@ def _build_airbyte_definitions() -> tuple[list, dict]:
     if connection_filter is not None:
         load_kwargs["connection_filter"] = connection_filter
 
-    airbyte_assets = load_assets_from_airbyte_instance(**load_kwargs)
+    try:
+        airbyte_assets = load_assets_from_airbyte_instance(**load_kwargs)
+    except (Exception, Failure) as exc:
+        # Unreachable API, 401 without credentials, etc. — keep user_code healthy
+        logger.warning(
+            "AIRBYTE_ENABLED=true but Airbyte assets could not load (%s). "
+            "Set AIRBYTE_USERNAME/PASSWORD (abctl local credentials), fix host/port, "
+            "or AIRBYTE_ENABLED=false until ready.",
+            exc,
+        )
+        return [], {}
+
     return [airbyte_assets], {"airbyte": airbyte_resource}
 
 
