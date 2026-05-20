@@ -27,7 +27,15 @@ docker-compose build --no-cache user_code
 docker-compose up -d user_code dagster_webserver dagster_daemon
 ```
 
-Dagster job: `transform_raw_to_silver_gold`
+Dagster job: `ingest_and_transform` (Airbyte sync → dbt build) when `AIRBYTE_ENABLED=true`, else `transform_raw_to_silver_gold`.
+
+### Raw → silver pipeline
+
+1. Run one Airbyte sync; list tables: `psql ... -c "\dt raw.*"`
+2. Set `infra/dbt/models/sources.yml` and `silver/stg_custom_api.sql` to the real raw table name
+3. In `.env`: `AIRBYTE_ENABLED=true`, `AIRBYTE_CONNECTION_ID` or `AIRBYTE_CONNECTION_NAME` (exact name from Airbyte UI)
+4. Rebuild `user_code`, enable schedule in Dagster UI (Deployments → Schedules)
+5. Materialize job `ingest_and_transform` or wait for `DAGSTER_ETL_CRON` (default 02:00)
 
 ### dbt-Workbench vendor
 

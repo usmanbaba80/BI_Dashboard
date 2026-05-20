@@ -2,13 +2,19 @@ version: 2
 
 # 1) Run Airbyte sync -> tables appear in schema raw
 # 2) List them:  psql ... -c "\dt raw.*"
-# 3) Add each table below, then create silver/gold models in dbt Workbench UI
+# 3) Set `name` below to the actual raw table (and in silver/stg_custom_api.sql source()).
+#    Optional: set meta.dagster.asset_key to match Dagster's Airbyte asset key (see Dagster UI).
 #
 sources:
   - name: raw
     description: Bronze tables created by Airbyte
     schema: raw
-    tables: []
-    # Example after first sync:
-    # tables:
-    #   - name: raw_ga4_stg
+    tables:
+      - name: test
+        description: Replace with your Airbyte destination table name after first sync
+        meta:
+          dagster:
+            asset_key:
+              - airbyte
+              - custom_http_to_postgres
+              - test

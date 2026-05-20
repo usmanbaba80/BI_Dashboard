@@ -47,6 +47,8 @@ services:
       dockerfile: dagster/Dockerfile_user_code
     image: smb_analytics_user_code:latest
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
       DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
@@ -59,6 +61,14 @@ services:
       WAREHOUSE_PG_DATABASE: ${WAREHOUSE_PG_DATABASE}
       DBT_SCHEMA: ${DBT_SCHEMA:-silver}
       DAGSTER_ETL_CRON: ${DAGSTER_ETL_CRON:-0 2 * * *}
+      AIRBYTE_ENABLED: ${AIRBYTE_ENABLED:-false}
+      AIRBYTE_API_HOST: ${AIRBYTE_API_HOST:-host.docker.internal}
+      AIRBYTE_API_PORT: ${AIRBYTE_API_PORT:-8000}
+      AIRBYTE_CONNECTION_ID: ${AIRBYTE_CONNECTION_ID:-}
+      AIRBYTE_CONNECTION_NAME: ${AIRBYTE_CONNECTION_NAME:-}
+      AIRBYTE_ASSET_KEY_PREFIX: ${AIRBYTE_ASSET_KEY_PREFIX:-airbyte}
+      AIRBYTE_USERNAME: ${AIRBYTE_USERNAME:-}
+      AIRBYTE_PASSWORD: ${AIRBYTE_PASSWORD:-}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
