@@ -2,8 +2,9 @@ version: 2
 
 # 1) Run Airbyte sync -> tables appear in schema raw
 # 2) List them:  psql ... -c "\dt raw.*"
-# 3) Set `name` below to the actual raw table (and in silver/stg_custom_api.sql source()).
-#    Optional: set meta.dagster.asset_key to match Dagster's Airbyte asset key (see Dagster UI).
+# 3) Set `name` to the raw Postgres table (same in silver/stg_*.sql source('raw', '...')).
+# 4) After AIRBYTE_ENABLED=true, open Dagster -> Assets and copy the Airbyte asset key path
+#    for your stream into meta.dagster.asset_key below (3 segments: prefix / connection / stream).
 #
 sources:
   - name: raw
@@ -11,10 +12,10 @@ sources:
     schema: raw
     tables:
       - name: test
-        description: Replace with your Airbyte destination table name after first sync
+        description: Must match \dt raw.* on the warehouse
         meta:
           dagster:
             asset_key:
               - airbyte
-              - custom_http_to_postgres
+              - YOUR_AIRBYTE_CONNECTION_NAME
               - test

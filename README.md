@@ -23,4 +23,4 @@ psql ... -f sql/001_database_structure.sql
 
 dbt models: create in Workbench UI under `infra/dbt/models/` after Airbyte syncs; register raw tables in `models/sources.yml`.
 
-Details: `infra/README.md`
+Details: `infra/README.md` — **one-shot deploy:** `infra/DEPLOY.md`

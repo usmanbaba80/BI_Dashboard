@@ -22,7 +22,18 @@ run_launcher:
       - WAREHOUSE_PG_PASSWORD
       - WAREHOUSE_PG_DATABASE
       - DBT_SCHEMA
+      - AIRBYTE_ENABLED
+      - AIRBYTE_API_HOST
+      - AIRBYTE_API_PORT
+      - AIRBYTE_CONNECTION_ID
+      - AIRBYTE_CONNECTION_NAME
+      - AIRBYTE_ASSET_KEY_PREFIX
+      - AIRBYTE_USERNAME
+      - AIRBYTE_PASSWORD
     network: infra_analytics
+    container_kwargs:
+      extra_hosts:
+        host.docker.internal: host-gateway
 
 run_storage:
   module: dagster_postgres.run_storage

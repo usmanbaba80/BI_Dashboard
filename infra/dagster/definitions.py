@@ -96,6 +96,20 @@ def _build_airbyte_definitions() -> tuple[list, dict]:
 class RawSourceAirbyteTranslator(DagsterDbtTranslator):
     """Link dbt models on source('raw', ...) to upstream Airbyte Dagster assets."""
 
+    def __init__(self, manifest_path: Path) -> None:
+        super().__init__()
+        self._source_asset_keys: dict[str, AssetKey] = {}
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                manifest = {}
+            for unique_id, node in (manifest.get("sources") or {}).items():
+                dagster_meta = (node.get("meta") or {}).get("dagster") or {}
+                asset_key = dagster_meta.get("asset_key")
+                if asset_key:
+                    self._source_asset_keys[unique_id] = AssetKey(asset_key)
+
     def get_deps_asset_keys(
         self, dbt_resource_props: Mapping[str, Any]
     ) -> Iterable[AssetKey]:
@@ -110,6 +124,9 @@ class RawSourceAirbyteTranslator(DagsterDbtTranslator):
 
         for node_id in dbt_resource_props.get("depends_on", {}).get("nodes", []):
             if not node_id.startswith("source."):
+                continue
+            if node_id in self._source_asset_keys:
+                deps.add(self._source_asset_keys[node_id])
                 continue
             parts = node_id.split(".")
             if len(parts) < 4 or parts[-2] != "raw":
@@ -162,7 +179,7 @@ def _build_definitions() -> Definitions:
 
         translator: Optional[DagsterDbtTranslator] = None
         if airbyte_asset_defs:
-            translator = RawSourceAirbyteTranslator()
+            translator = RawSourceAirbyteTranslator(manifest_path)
 
         @dbt_assets(
             manifest=manifest_path,

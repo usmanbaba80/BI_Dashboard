@@ -1,5 +1,7 @@
 ## Infra stack
 
+**Full VPS checklist (pull + pipeline):** [DEPLOY.md](./DEPLOY.md)
+
 | Service | Port | Notes |
 |---------|------|--------|
 | Dagster | 3000 | Orchestration |
@@ -19,6 +21,16 @@ docker-compose up -d --build
 On older hosts use `docker-compose` (hyphen), not `docker compose`. Compose file is v2.4 (compatible with legacy `docker-compose` 1.x).
 
 Dagster job containers use Docker network `infra_analytics` (from project folder name `infra`).
+
+### dbt-Workbench Environments
+
+Workbench must use the project `profiles.yml` (not an empty internal folder). After `git pull`, recreate the backend if Environments shows **No profiles configured yet**:
+
+```bash
+docker-compose up -d dbt_workbench_backend
+```
+
+Create environment: Profile **`mobile_analytics`**, Target **`prod`**. Ignore the **New Profile** localhost template.
 
 ### After adding dbt models in Workbench
 
