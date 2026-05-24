@@ -3,10 +3,10 @@
 --   psql ... -c "\dt raw.*"
 {{ config(
     materialized='table',
-    schema='silver',
     tags=['silver'],
 ) }}
 
 select
-    *
+    test,
+    meta
 from {{ source('raw', 'test') }}

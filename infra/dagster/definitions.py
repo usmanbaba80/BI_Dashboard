@@ -7,9 +7,12 @@ Rebuild user_code after changing dbt models: docker-compose build --no-cache use
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
@@ -61,8 +64,43 @@ def _airbyte_connection_filter():
     return _filter
 
 
+def _airbyte_api_ready() -> bool:
+    """Probe Airbyte before registering cacheable assets (avoids crash on 401 at grpc load)."""
+    host = os.environ.get("AIRBYTE_API_HOST", "host.docker.internal").strip()
+    port = os.environ.get("AIRBYTE_API_PORT", "8000").strip()
+    username = os.environ.get("AIRBYTE_USERNAME", "").strip()
+    password = os.environ.get("AIRBYTE_PASSWORD", "").strip()
+    url = f"http://{host}:{port}/api/v1/workspaces/list"
+    request = urllib.request.Request(
+        url,
+        data=b"{}",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    if username and password:
+        token = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
+        request.add_header("Authorization", f"Basic {token}")
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return 200 <= response.status < 300
+    except urllib.error.HTTPError as exc:
+        logger.warning("Airbyte API HTTP %s for %s", exc.code, url)
+        return False
+    except Exception as exc:
+        logger.warning("Airbyte API unreachable at %s: %s", url, exc)
+        return False
+
+
 def _build_airbyte_definitions() -> tuple[list, dict]:
     if not _env_bool("AIRBYTE_ENABLED"):
+        return [], {}
+
+    if not _airbyte_api_ready():
+        logger.warning(
+            "AIRBYTE_ENABLED=true but Airbyte API is not ready (auth or network). "
+            "Run: abctl local credentials — set AIRBYTE_USERNAME/PASSWORD in .env, "
+            "or AIRBYTE_ENABLED=false. Dagster will start without Airbyte assets."
+        )
         return [], {}
 
     try:
