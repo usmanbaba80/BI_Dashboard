@@ -202,11 +202,11 @@ services:
   dbt_workbench_frontend:
     build:
       context: ./vendor/dbt-Workbench/frontend
+      args:
+        VITE_API_BASE_URL: ${DBTWB_VITE_API_BASE_URL:-http://localhost:8001}
     restart: unless-stopped
     ports:
       - "3001:3000"
-    environment:
-      VITE_API_BASE_URL: ${DBTWB_VITE_API_BASE_URL}
     networks:
       - analytics
     depends_on:

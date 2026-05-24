@@ -46,15 +46,54 @@ Edit `infra/dbt/models/sources.yml` and `infra/dbt/models/silver/stg_custom_api.
 - `source('raw', '<table>')` = actual raw table name
 - `meta.dagster.asset_key` middle segment = **exact** Airbyte connection name (see Dagster Assets after step 6)
 
-## 5. Build and start
+## 5. Vendor frontend `package.json` (if build says `COPY failed: no source files`)
+
+The vendored Workbench `.gitignore` used to exclude `frontend/package.json`. After pull, verify:
+
+```bash
+ls -la /opt/BI_Dashboard/infra/vendor/dbt-Workbench/frontend/package.json
+```
+
+If missing, either `git pull` the latest repo (files are tracked now) or:
+
+```bash
+curl -fsSL -o /opt/BI_Dashboard/infra/vendor/dbt-Workbench/frontend/package.json \
+  https://raw.githubusercontent.com/rezer-bleede/dbt-Workbench/main/frontend/package.json
+curl -fsSL -o /opt/BI_Dashboard/infra/vendor/dbt-Workbench/frontend/package-lock.json \
+  https://raw.githubusercontent.com/rezer-bleede/dbt-Workbench/main/frontend/package-lock.json
+```
+
+## 6. Build and start (full stack)
+
+Use `docker-compose down` first (step 1). Avoid `docker-compose up --force-recreate` on this host (old compose v1.29 + Docker → `ContainerConfig` errors). Prefer `docker-compose down` then `docker-compose up -d`.
 
 ```bash
 cd /opt/BI_Dashboard/infra
-docker-compose build --no-cache user_code dagster_webserver dagster_daemon
+
+# Rebuild images that changed in this repo
+docker-compose build --no-cache \
+  user_code \
+  dagster_webserver \
+  dagster_daemon \
+  dbt_workbench_backend \
+  dbt_workbench_frontend
+
 docker-compose up -d
+docker-compose ps
 ```
 
-## 6. dbt Workbench
+Until Airbyte API credentials work, keep `AIRBYTE_ENABLED=false` in `.env` so `user_code` stays healthy.
+
+## 7. dbt Workbench
+
+**"Failed to load profiles"** — the UI calls the API URL baked in at **frontend build** time. In `.env` set `DBTWB_VITE_API_BASE_URL=http://<APP_PUBLIC_IP>:8001` (not `localhost`), then rebuild the frontend:
+
+```bash
+docker-compose build --no-cache dbt_workbench_frontend
+docker-compose up -d --no-deps dbt_workbench_frontend
+```
+
+Test API from your laptop: `curl http://<APP_IP>:8001/profiles`
 
 1. Open `http://<APP_IP>:3001`
 2. **Environments** → profiles should show `mobile_analytics` / `prod` (not “No profiles configured yet”)
@@ -63,14 +102,14 @@ docker-compose up -d
 5. **Runs** → target `prod` → **Run**, then **Docs**
 6. Dashboard → artifacts **Present**
 
-## 7. Dagster pipeline
+## 8. Dagster pipeline
 
 1. Open `http://<APP_IP>:3000`
 2. **Assets** → Airbyte assets + dbt models; edge from Airbyte stream → silver model
 3. **Jobs** → `ingest_and_transform` → Launch run
 4. **Deployments** → **Schedules** → enable nightly schedule
 
-## 8. Airbyte (separate)
+## 9. Airbyte (separate)
 
 - UI: `http://<APP_IP>:8000` (or SSH tunnel)
 - Destination: host `10.0.4.2`, schema `raw`, password set

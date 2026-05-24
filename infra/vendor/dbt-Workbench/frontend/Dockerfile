@@ -1,5 +1,8 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
+# Baked into the JS bundle at build time (runtime env on the container does not change this)
+ARG VITE_API_BASE_URL=http://localhost:8001
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 COPY package*.json ./
 RUN npm install
 COPY . .

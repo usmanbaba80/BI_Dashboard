@@ -1,0 +1,48 @@
+{
+  "name": "dbt-workbench-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:log": "vite > vite.log 2>&1",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest --run",
+    "e2e:install": "playwright install --with-deps chromium",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "PWDEBUG=1 playwright test",
+    "test:e2e:docker": "node ../scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^1.1.8",
+    "@codemirror/autocomplete": "6.20.0",
+    "@codemirror/lang-sql": "6.10.0",
+    "@uiw/codemirror-theme-vscode": "^4.25.3",
+    "@uiw/react-codemirror": "4.25.3",
+    "axios": "^1.7.2",
+    "d3": "^7.9.0",
+    "js-yaml": "^4.1.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.23.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.2",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.19",
+    "jsdom": "^24.0.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.12",
+    "vitest": "^1.5.0"
+  }
+}
