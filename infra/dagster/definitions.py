@@ -234,13 +234,13 @@ def _build_definitions() -> Definitions:
         if airbyte_asset_defs:
             translator = RawSourceAirbyteTranslator(manifest_path)
 
-        @dbt_assets(
-            manifest=manifest_path,
-            dagster_dbt_translator=translator,
-        )
-        def mobile_analytics_dbt_assets(
-            context: AssetExecutionContext, dbt: DbtCliResource
-        ):
+        dbt_assets_kwargs: dict[str, Any] = {"manifest": manifest_path}
+        if translator is not None:
+            dbt_assets_kwargs["dagster_dbt_translator"] = translator
+
+        # No type hint on `context` — nested defs break Dagster's context annotation check
+        @dbt_assets(**dbt_assets_kwargs)
+        def mobile_analytics_dbt_assets(context, dbt: DbtCliResource):
             yield from dbt.cli(["build"], context=context).stream()
 
         assets.append(mobile_analytics_dbt_assets)
