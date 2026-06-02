@@ -12,6 +12,7 @@ import base64
 import json
 import logging
 import os
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -95,13 +96,27 @@ def _airbyte_api_ready() -> bool:
         return False
 
 
+def _slugify_dagster_name(value: str) -> str:
+    """Dagster op/input names only allow [A-Za-z0-9_]."""
+    slug = re.sub(r"[^A-Za-z0-9_]+", "_", value.strip())
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    return slug or "connection"
+
+
+def _airbyte_connection_slug() -> str:
+    override = os.environ.get("AIRBYTE_CONNECTION_SLUG", "").strip()
+    if override:
+        return _slugify_dagster_name(override)
+    raw = os.environ.get("AIRBYTE_CONNECTION_NAME", "").strip()
+    if not raw:
+        raw = os.environ.get("AIRBYTE_CONNECTION_ID", "connection")[:8]
+    return _slugify_dagster_name(raw)
+
+
 def _airbyte_sync_asset_key() -> AssetKey:
     prefix = os.environ.get("AIRBYTE_ASSET_KEY_PREFIX", "airbyte").strip()
     key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
-    connection_name = os.environ.get("AIRBYTE_CONNECTION_NAME", "").strip()
-    if not connection_name:
-        connection_name = os.environ.get("AIRBYTE_CONNECTION_ID", "connection")[:8]
-    return AssetKey([*key_prefix, connection_name, "sync"])
+    return AssetKey([*key_prefix, _airbyte_connection_slug(), "sync"])
 
 
 def _build_airbyte_public_sync_asset() -> list:
@@ -216,7 +231,9 @@ class RawSourceAirbyteTranslator(DagsterDbtTranslator):
                 dagster_meta = (node.get("meta") or {}).get("dagster") or {}
                 asset_key = dagster_meta.get("asset_key")
                 if asset_key:
-                    self._source_asset_keys[unique_id] = AssetKey(asset_key)
+                    self._source_asset_keys[unique_id] = AssetKey(
+                        [_slugify_dagster_name(str(part)) for part in asset_key]
+                    )
 
     def get_deps_asset_keys(
         self, dbt_resource_props: Mapping[str, Any]
@@ -229,21 +246,21 @@ class RawSourceAirbyteTranslator(DagsterDbtTranslator):
         for node_id in dbt_resource_props.get("depends_on", {}).get("nodes", []):
             if not node_id.startswith("source."):
                 continue
-            if node_id in self._source_asset_keys:
-                deps.add(self._source_asset_keys[node_id])
-                continue
             parts = node_id.split(".")
             if len(parts) < 4 or parts[-2] != "raw":
                 continue
             if public_api_configured():
                 deps.add(_airbyte_sync_asset_key())
                 continue
+            if node_id in self._source_asset_keys:
+                deps.add(self._source_asset_keys[node_id])
+                continue
             prefix = os.environ.get("AIRBYTE_ASSET_KEY_PREFIX", "airbyte").strip()
             key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
-            connection_name = os.environ.get("AIRBYTE_CONNECTION_NAME", "").strip()
             table_name = parts[-1]
-            if connection_name:
-                deps.add(AssetKey([*key_prefix, connection_name, table_name]))
+            slug = _airbyte_connection_slug()
+            if slug:
+                deps.add(AssetKey([*key_prefix, slug, table_name]))
             else:
                 deps.add(AssetKey([*key_prefix, table_name]))
 
