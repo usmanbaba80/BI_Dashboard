@@ -11,7 +11,7 @@ WORKDIR /opt/dagster/app
 COPY dagster/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY dagster/definitions.py dagster/airbyte_public.py .
+COPY dagster/definitions.py dagster/airbyte_public.py ./
 
 # dbt project (build context must be infra/ — contains dbt/dbt_project.yml)
 COPY dbt/ /opt/dagster/dbt/
