@@ -128,6 +128,7 @@ def _build_airbyte_public_sync_asset() -> list:
 
     @asset(
         key=sync_key,
+        name="airbyte_connection_sync",
         description=(
             f"Triggers Airbyte connection sync ({connection_id}) via public API, "
             "waits for job completion, loads raw.*"
@@ -216,6 +217,10 @@ def _build_airbyte_definitions() -> tuple[list, dict]:
     return _build_airbyte_legacy_definitions()
 
 
+def _sanitize_asset_key(key: AssetKey) -> AssetKey:
+    return AssetKey([_slugify_dagster_name(str(part)) for part in key.path])
+
+
 class RawSourceAirbyteTranslator(DagsterDbtTranslator):
     """Link dbt models on source('raw', ...) to upstream Airbyte Dagster assets."""
 
@@ -238,31 +243,47 @@ class RawSourceAirbyteTranslator(DagsterDbtTranslator):
     def get_deps_asset_keys(
         self, dbt_resource_props: Mapping[str, Any]
     ) -> Iterable[AssetKey]:
-        deps = set(super().get_deps_asset_keys(dbt_resource_props))
+        deps = {
+            _sanitize_asset_key(key)
+            for key in super().get_deps_asset_keys(dbt_resource_props)
+        }
 
         if dbt_resource_props.get("resource_type") != "model":
             return deps
 
-        for node_id in dbt_resource_props.get("depends_on", {}).get("nodes", []):
-            if not node_id.startswith("source."):
-                continue
-            parts = node_id.split(".")
-            if len(parts) < 4 or parts[-2] != "raw":
-                continue
-            if public_api_configured():
-                deps.add(_airbyte_sync_asset_key())
-                continue
+        raw_nodes = [
+            node_id
+            for node_id in dbt_resource_props.get("depends_on", {}).get("nodes", [])
+            if node_id.startswith("source.")
+            and len(node_id.split(".")) >= 4
+            and node_id.split(".")[-2] == "raw"
+        ]
+        if not raw_nodes:
+            return deps
+
+        prefix = os.environ.get("AIRBYTE_ASSET_KEY_PREFIX", "airbyte").strip()
+        key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
+        airbyte_root = _slugify_dagster_name(key_prefix[0])
+
+        if public_api_configured():
+            # Manifest meta may still reference human-readable Airbyte names (spaces/arrows).
+            deps = {
+                key
+                for key in deps
+                if not (
+                    len(key.path) >= 1
+                    and _slugify_dagster_name(str(key.path[0])) == airbyte_root
+                )
+            }
+            deps.add(_airbyte_sync_asset_key())
+            return deps
+
+        for node_id in raw_nodes:
             if node_id in self._source_asset_keys:
                 deps.add(self._source_asset_keys[node_id])
                 continue
-            prefix = os.environ.get("AIRBYTE_ASSET_KEY_PREFIX", "airbyte").strip()
-            key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
-            table_name = parts[-1]
-            slug = _airbyte_connection_slug()
-            if slug:
-                deps.add(AssetKey([*key_prefix, slug, table_name]))
-            else:
-                deps.add(AssetKey([*key_prefix, table_name]))
+            table_name = node_id.split(".")[-1]
+            deps.add(AssetKey([*key_prefix, _airbyte_connection_slug(), table_name]))
 
         return deps
 
