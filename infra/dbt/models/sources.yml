@@ -3,8 +3,9 @@ version: 2
 # 1) Run Airbyte sync -> tables appear in schema raw
 # 2) List them:  psql ... -c "\dt raw.*"
 # 3) Set `name` to the raw Postgres table (same in silver/stg_*.sql source('raw', '...')).
-# 4) After AIRBYTE_ENABLED=true, open Dagster -> Assets and copy the Airbyte asset key path
-#    for your stream into meta.dagster.asset_key below (3 segments: prefix / connection / stream).
+# 4) With abctl public API (AIRBYTE_CLIENT_ID/SECRET), Dagster asset is:
+#    airbyte / <AIRBYTE_CONNECTION_NAME> / sync
+#    Legacy dagster-airbyte: copy per-stream asset key from Dagster UI into meta.dagster.asset_key.
 #
 sources:
   - name: raw
@@ -17,5 +18,5 @@ sources:
           dagster:
             asset_key:
               - airbyte
-              - YOUR_AIRBYTE_CONNECTION_NAME
+              - BlinkAI_API → datawarehouse
               - test

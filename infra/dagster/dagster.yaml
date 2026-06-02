@@ -30,6 +30,10 @@ run_launcher:
       - AIRBYTE_ASSET_KEY_PREFIX
       - AIRBYTE_USERNAME
       - AIRBYTE_PASSWORD
+      - AIRBYTE_CLIENT_ID
+      - AIRBYTE_CLIENT_SECRET
+      - AIRBYTE_JOB_POLL_SECONDS
+      - AIRBYTE_JOB_TIMEOUT_SECONDS
     network: infra_analytics
     container_kwargs:
       extra_hosts:

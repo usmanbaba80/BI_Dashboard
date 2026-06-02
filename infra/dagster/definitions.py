@@ -1,8 +1,9 @@
 """
 Dagster orchestration: Airbyte ingestion (raw) -> dbt (silver/gold).
 
-Set AIRBYTE_ENABLED=true and Airbyte API env vars after abctl install.
-Rebuild user_code after changing dbt models: docker-compose build --no-cache user_code
+abctl Airbyte: set AIRBYTE_CLIENT_ID/SECRET (abctl local credentials) + AIRBYTE_CONNECTION_ID.
+Legacy /api/v1 + dagster-airbyte is only used when client credentials are not set.
+Rebuild user_code after changes: docker-compose build --no-cache user_code
 """
 
 from __future__ import annotations
@@ -16,10 +17,13 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
+from airbyte_public import api_ready as public_api_ready
+from airbyte_public import fetch_access_token, public_api_configured
+from airbyte_public import trigger_connection_sync, wait_for_job
+
 logger = logging.getLogger(__name__)
 
 from dagster import (
-    AssetExecutionContext,
     AssetKey,
     AssetSelection,
     Definitions,
@@ -91,16 +95,48 @@ def _airbyte_api_ready() -> bool:
         return False
 
 
-def _build_airbyte_definitions() -> tuple[list, dict]:
-    if not _env_bool("AIRBYTE_ENABLED"):
-        return [], {}
+def _airbyte_sync_asset_key() -> AssetKey:
+    prefix = os.environ.get("AIRBYTE_ASSET_KEY_PREFIX", "airbyte").strip()
+    key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
+    connection_name = os.environ.get("AIRBYTE_CONNECTION_NAME", "").strip()
+    if not connection_name:
+        connection_name = os.environ.get("AIRBYTE_CONNECTION_ID", "connection")[:8]
+    return AssetKey([*key_prefix, connection_name, "sync"])
 
-    if not _airbyte_api_ready():
-        logger.warning(
-            "AIRBYTE_ENABLED=true but Airbyte API is not ready (auth or network). "
-            "Run: abctl local credentials — set AIRBYTE_USERNAME/PASSWORD in .env, "
-            "or AIRBYTE_ENABLED=false. Dagster will start without Airbyte assets."
+
+def _build_airbyte_public_sync_asset() -> list:
+    """Single Dagster asset: trigger Airbyte connection sync via /api/public/v1 (abctl)."""
+    connection_id = os.environ.get("AIRBYTE_CONNECTION_ID", "").strip()
+    sync_key = _airbyte_sync_asset_key()
+    poll_seconds = int(os.environ.get("AIRBYTE_JOB_POLL_SECONDS", "15"))
+    timeout_seconds = int(os.environ.get("AIRBYTE_JOB_TIMEOUT_SECONDS", "3600"))
+
+    @asset(
+        key=sync_key,
+        description=(
+            f"Triggers Airbyte connection sync ({connection_id}) via public API, "
+            "waits for job completion, loads raw.*"
+        ),
+    )
+    def airbyte_connection_sync(context):
+        token = fetch_access_token()
+        context.log.info("Triggering Airbyte sync for connection %s", connection_id)
+        job_id = trigger_connection_sync(connection_id, token)
+        context.log.info("Airbyte job started: %s", job_id)
+        result = wait_for_job(
+            job_id,
+            token,
+            poll_seconds=poll_seconds,
+            timeout_seconds=timeout_seconds,
+            log=context.log,
         )
+        return {"connection_id": connection_id, "job_id": job_id, "result": result}
+
+    return [airbyte_connection_sync]
+
+
+def _build_airbyte_legacy_definitions() -> tuple[list, dict]:
+    if not _airbyte_api_ready():
         return [], {}
 
     try:
@@ -134,16 +170,35 @@ def _build_airbyte_definitions() -> tuple[list, dict]:
     try:
         airbyte_assets = load_assets_from_airbyte_instance(**load_kwargs)
     except (Exception, Failure) as exc:
-        # Unreachable API, 401 without credentials, etc. — keep user_code healthy
-        logger.warning(
-            "AIRBYTE_ENABLED=true but Airbyte assets could not load (%s). "
-            "Set AIRBYTE_USERNAME/PASSWORD (abctl local credentials), fix host/port, "
-            "or AIRBYTE_ENABLED=false until ready.",
-            exc,
-        )
+        logger.warning("Legacy Airbyte assets could not load (%s)", exc)
         return [], {}
 
     return [airbyte_assets], {"airbyte": airbyte_resource}
+
+
+def _build_airbyte_definitions() -> tuple[list, dict]:
+    if not _env_bool("AIRBYTE_ENABLED"):
+        return [], {}
+
+    if public_api_configured():
+        if not public_api_ready():
+            logger.warning(
+                "AIRBYTE_ENABLED=true but public API is not ready. "
+                "Set AIRBYTE_CLIENT_ID/SECRET + AIRBYTE_CONNECTION_ID from "
+                "'abctl local credentials', or AIRBYTE_ENABLED=false."
+            )
+            return [], {}
+        return _build_airbyte_public_sync_asset(), {}
+
+    if not _airbyte_api_ready():
+        logger.warning(
+            "AIRBYTE_ENABLED=true but Airbyte API is not ready. "
+            "For abctl set AIRBYTE_CLIENT_ID/SECRET (abctl local credentials), "
+            "or legacy AIRBYTE_USERNAME/PASSWORD for /api/v1, or AIRBYTE_ENABLED=false."
+        )
+        return [], {}
+
+    return _build_airbyte_legacy_definitions()
 
 
 class RawSourceAirbyteTranslator(DagsterDbtTranslator):
@@ -171,10 +226,6 @@ class RawSourceAirbyteTranslator(DagsterDbtTranslator):
         if dbt_resource_props.get("resource_type") != "model":
             return deps
 
-        prefix = os.environ.get("AIRBYTE_ASSET_KEY_PREFIX", "airbyte").strip()
-        key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
-        connection_name = os.environ.get("AIRBYTE_CONNECTION_NAME", "").strip()
-
         for node_id in dbt_resource_props.get("depends_on", {}).get("nodes", []):
             if not node_id.startswith("source."):
                 continue
@@ -184,6 +235,12 @@ class RawSourceAirbyteTranslator(DagsterDbtTranslator):
             parts = node_id.split(".")
             if len(parts) < 4 or parts[-2] != "raw":
                 continue
+            if public_api_configured():
+                deps.add(_airbyte_sync_asset_key())
+                continue
+            prefix = os.environ.get("AIRBYTE_ASSET_KEY_PREFIX", "airbyte").strip()
+            key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
+            connection_name = os.environ.get("AIRBYTE_CONNECTION_NAME", "").strip()
             table_name = parts[-1]
             if connection_name:
                 deps.add(AssetKey([*key_prefix, connection_name, table_name]))
