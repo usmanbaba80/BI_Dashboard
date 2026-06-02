@@ -128,7 +128,6 @@ def _build_airbyte_public_sync_asset() -> list:
 
     @asset(
         key=sync_key,
-        name="airbyte_connection_sync",
         description=(
             f"Triggers Airbyte connection sync ({connection_id}) via public API, "
             "waits for job completion, loads raw.*"
