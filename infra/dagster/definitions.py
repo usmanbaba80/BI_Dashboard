@@ -198,11 +198,10 @@ def _build_airbyte_definitions() -> tuple[list, dict]:
     if public_api_configured():
         if not public_api_ready():
             logger.warning(
-                "AIRBYTE_ENABLED=true but public API is not ready. "
-                "Set AIRBYTE_CLIENT_ID/SECRET + AIRBYTE_CONNECTION_ID from "
-                "'abctl local credentials', or AIRBYTE_ENABLED=false."
+                "AIRBYTE_ENABLED=true but public API probe failed at startup. "
+                "Sync asset is still registered; runs will fail until CLIENT_ID/SECRET, "
+                "CONNECTION_ID, and host.docker.internal:8000 work from this container."
             )
-            return [], {}
         return _build_airbyte_public_sync_asset(), {}
 
     if not _airbyte_api_ready():
