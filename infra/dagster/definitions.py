@@ -339,17 +339,27 @@ def _build_definitions() -> Definitions:
 
         assets.append(mobile_analytics_dbt_assets)
 
-        if airbyte_asset_defs:
-            ingest_and_transform = define_asset_job(
-                name="ingest_and_transform",
-                selection=AssetSelection.all(),
-                description="Run Airbyte sync(s) to raw, then dbt build for silver/gold",
-            )
+        if _env_bool("AIRBYTE_ENABLED"):
+            if airbyte_asset_defs:
+                ingest_and_transform = define_asset_job(
+                    name="ingest_and_transform",
+                    selection=AssetSelection.all(),
+                    description="Run Airbyte sync(s) to raw, then dbt build for silver/gold",
+                )
+            else:
+                ingest_and_transform = define_asset_job(
+                    name="ingest_and_transform",
+                    selection=AssetSelection.assets(mobile_analytics_dbt_assets),
+                    description=(
+                        "AIRBYTE_ENABLED=true but sync asset did not load — "
+                        "check CLIENT_ID/SECRET/CONNECTION_ID and user_code logs; dbt only for now"
+                    ),
+                )
         else:
             ingest_and_transform = define_asset_job(
                 name="transform_raw_to_silver_gold",
                 selection=AssetSelection.assets(mobile_analytics_dbt_assets),
-                description="dbt build only (Airbyte not wired — enable AIRBYTE_ENABLED)",
+                description="dbt build only (set AIRBYTE_ENABLED=true for full pipeline)",
             )
 
         jobs.append(ingest_and_transform)

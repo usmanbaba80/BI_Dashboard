@@ -1,6 +1,9 @@
 ## Infra stack
 
-**Full VPS checklist (pull + pipeline):** [DEPLOY.md](./DEPLOY.md)
+| Guide | Purpose |
+|-------|---------|
+| **[OPERATIONS.md](./OPERATIONS.md)** | **Full setup: Airbyte sources/connections, dbt models, Dagster pipelines** |
+| [DEPLOY.md](./DEPLOY.md) | VPS deploy / rebuild checklist after `git pull` |
 
 | Service | Port | Notes |
 |---------|------|--------|

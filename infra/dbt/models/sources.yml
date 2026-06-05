@@ -4,7 +4,7 @@ version: 2
 # 2) List them:  psql ... -c "\dt raw.*"
 # 3) Set `name` to the raw Postgres table (same in silver/stg_*.sql source('raw', '...')).
 # 4) With abctl public API, Dagster asset key is (ASCII only, no spaces/arrows):
-#    airbyte / BlinkAI_API_datawarehouse / sync
+#    airbyte / BlinkAI_API_to_warehouse / sync  (use AIRBYTE_CONNECTION_SLUG in .env)
 #    Optional: AIRBYTE_CONNECTION_SLUG in .env overrides auto-slug from CONNECTION_NAME.
 #
 sources:
@@ -18,5 +18,5 @@ sources:
           dagster:
             asset_key:
               - airbyte
-              - BlinkAI_API_datawarehouse
+              - BlinkAI_API_to_warehouse
               - sync

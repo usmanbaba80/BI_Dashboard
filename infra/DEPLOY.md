@@ -2,6 +2,8 @@
 
 Use this after `git pull` on the App VPS (`/opt/BI_Dashboard`).
 
+**Day-to-day operations** (add sources, connections, dbt models, Dagster jobs): see **[OPERATIONS.md](./OPERATIONS.md)**.
+
 ## 1. Stop stack (required when `infra/dbt/` changed)
 
 ```bash
