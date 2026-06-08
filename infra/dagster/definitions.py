@@ -113,6 +113,19 @@ def _airbyte_connection_slug() -> str:
     return _slugify_dagster_name(raw)
 
 
+def _airbyte_connection_id() -> str:
+    return os.environ.get("AIRBYTE_CONNECTION_ID", "").strip()
+
+
+def _uses_public_airbyte_sync() -> bool:
+    """abctl/public API: one sync asset per AIRBYTE_CONNECTION_ID."""
+    if public_api_configured():
+        return True
+    # Register sync even when CLIENT_SECRET is missing in this process so user_code
+    # and DockerRunLauncher run containers expose the same asset keys.
+    return _env_bool("AIRBYTE_ENABLED") and bool(_airbyte_connection_id())
+
+
 def _airbyte_sync_asset_key() -> AssetKey:
     prefix = os.environ.get("AIRBYTE_ASSET_KEY_PREFIX", "airbyte").strip()
     key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
@@ -195,8 +208,15 @@ def _build_airbyte_definitions() -> tuple[list, dict]:
     if not _env_bool("AIRBYTE_ENABLED"):
         return [], {}
 
-    if public_api_configured():
-        if not public_api_ready():
+    if _uses_public_airbyte_sync():
+        if not public_api_configured():
+            logger.warning(
+                "AIRBYTE_ENABLED=true with CONNECTION_ID=%s but CLIENT_ID/SECRET "
+                "incomplete in this container. Sync asset is still registered; "
+                "ensure dagster_daemon has AIRBYTE_CLIENT_* and DockerRunLauncher passes them.",
+                _airbyte_connection_id(),
+            )
+        elif not public_api_ready():
             logger.warning(
                 "AIRBYTE_ENABLED=true but public API probe failed at startup. "
                 "Sync asset is still registered; runs will fail until CLIENT_ID/SECRET, "
@@ -263,7 +283,7 @@ class RawSourceAirbyteTranslator(DagsterDbtTranslator):
         key_prefix = [p for p in prefix.split("/") if p] if prefix else ["airbyte"]
         airbyte_root = _slugify_dagster_name(key_prefix[0])
 
-        if public_api_configured():
+        if _uses_public_airbyte_sync():
             # Manifest meta may still reference human-readable Airbyte names (spaces/arrows).
             deps = {
                 key
