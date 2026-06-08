@@ -34,4 +34,5 @@ EXPOSE 4000
 HEALTHCHECK --interval=10s --timeout=8s --start-period=60s --retries=12 \
     CMD dagster api grpc-health-check -h 127.0.0.1 -p 4000 || exit 1
 
-CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "definitions.py"]
+# code-server (not api grpc): Deployment → Reload in UI restarts user code subprocess
+CMD ["dagster", "code-server", "start", "-h", "0.0.0.0", "-p", "4000", "-f", "definitions.py"]
