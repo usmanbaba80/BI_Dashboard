@@ -1,0 +1,17 @@
+---
+# Authelia users. Replace the password hash below with your own.
+#
+# Generate an argon2 hash on the VPS:
+#   docker run --rm authelia/authelia:4.38.17 \
+#     authelia crypto hash generate argon2 --password 'YourStrongPassword'
+#
+# Paste the resulting "$argon2id$..." string as the password value.
+
+users:
+  admin:
+    displayname: 'Admin'
+    # Placeholder hash for password: "changeme" — REGENERATE before use.
+    password: '$argon2id$v=19$m=65536,t=3,p=4$REPLACE_WITH_YOUR_OWN_HASH'
+    email: admin@invicttusx.com
+    groups:
+      - admins
