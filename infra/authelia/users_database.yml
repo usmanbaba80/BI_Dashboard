@@ -11,7 +11,7 @@ users:
   admin:
     displayname: 'Admin'
     # Placeholder hash for password: "changeme" — REGENERATE before use.
-    password: '$argon2id$v=19$m=65536,t=3,p=4$REPLACE_WITH_YOUR_OWN_HASH'
+    password: '$argon2id$v=19$m=65536,t=3,p=4$HQxg1wg8FmLLvs7sSq7c0g$CXsM3JvbNE8gCczAzVZ+OcgKcdX2swnE5XzrT7vQxZk'
     email: admin@invicttusx.com
     groups:
       - admins
